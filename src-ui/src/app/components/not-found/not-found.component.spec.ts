@@ -1,7 +1,12 @@
+import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http'
+import { provideHttpClientTesting } from '@angular/common/http/testing'
 import { ComponentFixture, TestBed } from '@angular/core/testing'
-import { NotFoundComponent } from './not-found.component'
 import { By } from '@angular/platform-browser'
+import { RouterModule } from '@angular/router'
+import { NgxBootstrapIconsModule, allIcons } from 'ngx-bootstrap-icons'
+import { routes } from 'src/app/app-routing.module'
 import { LogoComponent } from '../common/logo/logo.component'
+import { NotFoundComponent } from './not-found.component'
 
 describe('NotFoundComponent', () => {
   let component: NotFoundComponent
@@ -9,7 +14,16 @@ describe('NotFoundComponent', () => {
 
   beforeEach(async () => {
     TestBed.configureTestingModule({
-      declarations: [NotFoundComponent, LogoComponent],
+      imports: [
+        NgxBootstrapIconsModule.pick(allIcons),
+        NotFoundComponent,
+        LogoComponent,
+        RouterModule.forRoot(routes),
+      ],
+      providers: [
+        provideHttpClient(withInterceptorsFromDi()),
+        provideHttpClientTesting(),
+      ],
     }).compileComponents()
 
     fixture = TestBed.createComponent(NotFoundComponent)

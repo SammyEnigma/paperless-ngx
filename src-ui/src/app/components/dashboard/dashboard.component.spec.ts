@@ -1,26 +1,28 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing'
-import { NgbAlertModule } from '@ng-bootstrap/ng-bootstrap'
-import { PermissionsGuard } from 'src/app/guards/permissions.guard'
-import { DashboardComponent } from './dashboard.component'
-import { HttpClientTestingModule } from '@angular/common/http/testing'
-import { SettingsService } from 'src/app/services/settings.service'
-import { StatisticsWidgetComponent } from './widgets/statistics-widget/statistics-widget.component'
-import { PageHeaderComponent } from '../common/page-header/page-header.component'
-import { WidgetFrameComponent } from './widgets/widget-frame/widget-frame.component'
-import { UploadFileWidgetComponent } from './widgets/upload-file-widget/upload-file-widget.component'
-import { SavedViewService } from 'src/app/services/rest/saved-view.service'
-import { PermissionsService } from 'src/app/services/permissions.service'
-import { By } from '@angular/platform-browser'
-import { SavedViewWidgetComponent } from './widgets/saved-view-widget/saved-view-widget.component'
-import { IfPermissionsDirective } from 'src/app/directives/if-permissions.directive'
-import { RouterTestingModule } from '@angular/router/testing'
-import { TourNgBootstrapModule, TourService } from 'ngx-ui-tour-ng-bootstrap'
-import { LogoComponent } from '../common/logo/logo.component'
-import { of, throwError } from 'rxjs'
-import { ToastService } from 'src/app/services/toast.service'
-import { SETTINGS_KEYS } from 'src/app/data/paperless-uisettings'
 import { CdkDragDrop, DragDropModule } from '@angular/cdk/drag-drop'
-import { PaperlessSavedView } from 'src/app/data/paperless-saved-view'
+import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http'
+import { provideHttpClientTesting } from '@angular/common/http/testing'
+import { ComponentFixture, TestBed } from '@angular/core/testing'
+import { By } from '@angular/platform-browser'
+import { RouterTestingModule } from '@angular/router/testing'
+import { NgbAlertModule } from '@ng-bootstrap/ng-bootstrap'
+import { NgxBootstrapIconsModule, allIcons } from 'ngx-bootstrap-icons'
+import { TourNgBootstrapModule, TourService } from 'ngx-ui-tour-ng-bootstrap'
+import { of, throwError } from 'rxjs'
+import { SavedView } from 'src/app/data/saved-view'
+import { SETTINGS_KEYS } from 'src/app/data/ui-settings'
+import { IfPermissionsDirective } from 'src/app/directives/if-permissions.directive'
+import { PermissionsGuard } from 'src/app/guards/permissions.guard'
+import { PermissionsService } from 'src/app/services/permissions.service'
+import { SavedViewService } from 'src/app/services/rest/saved-view.service'
+import { SettingsService } from 'src/app/services/settings.service'
+import { ToastService } from 'src/app/services/toast.service'
+import { LogoComponent } from '../common/logo/logo.component'
+import { PageHeaderComponent } from '../common/page-header/page-header.component'
+import { DashboardComponent } from './dashboard.component'
+import { SavedViewWidgetComponent } from './widgets/saved-view-widget/saved-view-widget.component'
+import { StatisticsWidgetComponent } from './widgets/statistics-widget/statistics-widget.component'
+import { UploadFileWidgetComponent } from './widgets/upload-file-widget/upload-file-widget.component'
+import { WidgetFrameComponent } from './widgets/widget-frame/widget-frame.component'
 
 const saved_views = [
   {
@@ -70,7 +72,12 @@ describe('DashboardComponent', () => {
 
   beforeEach(async () => {
     TestBed.configureTestingModule({
-      declarations: [
+      imports: [
+        NgbAlertModule,
+        RouterTestingModule,
+        TourNgBootstrapModule,
+        DragDropModule,
+        NgxBootstrapIconsModule.pick(allIcons),
         DashboardComponent,
         StatisticsWidgetComponent,
         PageHeaderComponent,
@@ -100,13 +107,8 @@ describe('DashboardComponent', () => {
             dashboardViews: saved_views.filter((v) => v.show_on_dashboard),
           },
         },
-      ],
-      imports: [
-        NgbAlertModule,
-        HttpClientTestingModule,
-        RouterTestingModule,
-        TourNgBootstrapModule,
-        DragDropModule,
+        provideHttpClient(withInterceptorsFromDi()),
+        provideHttpClientTesting(),
       ],
     }).compileComponents()
 
@@ -167,7 +169,7 @@ describe('DashboardComponent', () => {
     const toastSpy = jest.spyOn(toastService, 'showInfo')
     jest.spyOn(settingsService, 'storeSettings').mockReturnValue(of(true))
     component.onDrop({ previousIndex: 0, currentIndex: 1 } as CdkDragDrop<
-      PaperlessSavedView[]
+      SavedView[]
     >)
     expect(settingsSpy).toHaveBeenCalledWith([
       saved_views[2],
@@ -190,7 +192,7 @@ describe('DashboardComponent', () => {
       .spyOn(settingsService, 'storeSettings')
       .mockReturnValue(throwError(() => new Error('unable to save')))
     component.onDrop({ previousIndex: 0, currentIndex: 2 } as CdkDragDrop<
-      PaperlessSavedView[]
+      SavedView[]
     >)
     expect(toastSpy).toHaveBeenCalled()
   })

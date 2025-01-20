@@ -2,7 +2,6 @@ import datetime as dt
 import os
 import shutil
 from pathlib import Path
-from typing import Union
 from unittest import mock
 
 from django.test import TestCase
@@ -17,6 +16,7 @@ from documents.data_models import DocumentSource
 from documents.double_sided import STAGING_FILE_NAME
 from documents.double_sided import TIMEOUT_MINUTES
 from documents.tests.utils import DirectoriesMixin
+from documents.tests.utils import DummyProgressManager
 from documents.tests.utils import FileSystemAssertsMixin
 
 
@@ -33,7 +33,7 @@ class TestDoubleSided(DirectoriesMixin, FileSystemAssertsMixin, TestCase):
         self.dirs.double_sided_dir.mkdir()
         self.staging_file = self.dirs.scratch_dir / STAGING_FILE_NAME
 
-    def consume_file(self, srcname, dstname: Union[str, Path] = "foo.pdf"):
+    def consume_file(self, srcname, dstname: str | Path = "foo.pdf"):
         """
         Starts the consume process and also ensures the
         destination file does not exist afterwards
@@ -42,8 +42,9 @@ class TestDoubleSided(DirectoriesMixin, FileSystemAssertsMixin, TestCase):
         dst = self.dirs.double_sided_dir / dstname
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(src, dst)
-        with mock.patch("documents.tasks.async_to_sync"), mock.patch(
-            "documents.consumer.async_to_sync",
+        with mock.patch(
+            "documents.tasks.ProgressManager",
+            DummyProgressManager,
         ):
             msg = tasks.consume_file(
                 ConsumableDocument(
@@ -211,7 +212,7 @@ class TestDoubleSided(DirectoriesMixin, FileSystemAssertsMixin, TestCase):
         """
         msg = self.consume_file("simple.pdf", Path("..") / "simple.pdf")
         self.assertIsNotFile(self.staging_file)
-        self.assertRegex(msg, "Success. New document .* created")
+        self.assertRegex(msg, r"Success. New document id \d+ created")
 
     def test_subdirectory_upload(self):
         """
@@ -250,4 +251,4 @@ class TestDoubleSided(DirectoriesMixin, FileSystemAssertsMixin, TestCase):
         """
         msg = self.consume_file("simple.pdf")
         self.assertIsNotFile(self.staging_file)
-        self.assertRegex(msg, "Success. New document .* created")
+        self.assertRegex(msg, r"Success. New document id \d+ created")

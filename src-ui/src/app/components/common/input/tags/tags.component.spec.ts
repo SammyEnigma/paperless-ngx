@@ -1,25 +1,12 @@
-import {
-  ComponentFixture,
-  TestBed,
-  fakeAsync,
-  tick,
-} from '@angular/core/testing'
+import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http'
+import { provideHttpClientTesting } from '@angular/common/http/testing'
+import { ComponentFixture, TestBed } from '@angular/core/testing'
 import {
   FormsModule,
-  ReactiveFormsModule,
   NG_VALUE_ACCESSOR,
+  ReactiveFormsModule,
 } from '@angular/forms'
-import { TagsComponent } from './tags.component'
-import { PaperlessTag } from 'src/app/data/paperless-tag'
-import {
-  DEFAULT_MATCHING_ALGORITHM,
-  MATCH_ALL,
-} from 'src/app/data/matching-model'
-import { NgSelectComponent, NgSelectModule } from '@ng-select/ng-select'
 import { RouterTestingModule } from '@angular/router/testing'
-import { HttpClientTestingModule } from '@angular/common/http/testing'
-import { of } from 'rxjs'
-import { TagService } from 'src/app/services/rest/tag.service'
 import {
   NgbAccordionModule,
   NgbModal,
@@ -27,16 +14,26 @@ import {
   NgbModalRef,
   NgbPopoverModule,
 } from '@ng-bootstrap/ng-bootstrap'
+import { NgSelectModule } from '@ng-select/ng-select'
+import { NgxBootstrapIconsModule, allIcons } from 'ngx-bootstrap-icons'
+import { of } from 'rxjs'
+import {
+  DEFAULT_MATCHING_ALGORITHM,
+  MATCH_ALL,
+} from 'src/app/data/matching-model'
+import { Tag } from 'src/app/data/tag'
+import { IfOwnerDirective } from 'src/app/directives/if-owner.directive'
+import { TagService } from 'src/app/services/rest/tag.service'
+import { SettingsService } from 'src/app/services/settings.service'
 import { TagEditDialogComponent } from '../../edit-dialog/tag-edit-dialog/tag-edit-dialog.component'
 import { CheckComponent } from '../check/check.component'
-import { IfOwnerDirective } from 'src/app/directives/if-owner.directive'
-import { TextComponent } from '../text/text.component'
 import { ColorComponent } from '../color/color.component'
 import { PermissionsFormComponent } from '../permissions/permissions-form/permissions-form.component'
 import { SelectComponent } from '../select/select.component'
-import { SettingsService } from 'src/app/services/settings.service'
+import { TextComponent } from '../text/text.component'
+import { TagsComponent } from './tags.component'
 
-const tags: PaperlessTag[] = [
+const tags: Tag[] = [
   {
     id: 1,
     name: 'Tag1',
@@ -66,7 +63,15 @@ describe('TagsComponent', () => {
 
   beforeEach(async () => {
     TestBed.configureTestingModule({
-      declarations: [
+      imports: [
+        FormsModule,
+        ReactiveFormsModule,
+        NgSelectModule,
+        RouterTestingModule,
+        NgbModalModule,
+        NgbAccordionModule,
+        NgbPopoverModule,
+        NgxBootstrapIconsModule.pick(allIcons),
         TagsComponent,
         TagEditDialogComponent,
         TextComponent,
@@ -94,16 +99,8 @@ describe('TagsComponent', () => {
               }),
           },
         },
-      ],
-      imports: [
-        FormsModule,
-        ReactiveFormsModule,
-        NgSelectModule,
-        RouterTestingModule,
-        HttpClientTestingModule,
-        NgbModalModule,
-        NgbAccordionModule,
-        NgbPopoverModule,
+        provideHttpClient(withInterceptorsFromDi()),
+        provideHttpClientTesting(),
       ],
     }).compileComponents()
 
@@ -171,5 +168,13 @@ describe('TagsComponent', () => {
     component.tags = tags
     expect(component.getTag(2)).toEqual(tags[1])
     expect(component.getTag(4)).toBeUndefined()
+  })
+
+  it('should emit filtered documents', () => {
+    component.value = [10]
+    component.tags = tags
+    const emitSpy = jest.spyOn(component.filterDocuments, 'emit')
+    component.onFilterDocuments()
+    expect(emitSpy).toHaveBeenCalledWith([tags[2]])
   })
 })

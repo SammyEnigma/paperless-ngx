@@ -1,44 +1,68 @@
-import { ViewportScroller } from '@angular/common'
+import { AsyncPipe, ViewportScroller } from '@angular/common'
 import {
-  Component,
-  OnInit,
   AfterViewInit,
-  OnDestroy,
+  Component,
   Inject,
   LOCALE_ID,
+  OnDestroy,
+  OnInit,
 } from '@angular/core'
-import { FormGroup, FormControl } from '@angular/forms'
+import {
+  FormControl,
+  FormGroup,
+  FormsModule,
+  ReactiveFormsModule,
+} from '@angular/forms'
 import { ActivatedRoute, Router } from '@angular/router'
-import { NgbNavChangeEvent } from '@ng-bootstrap/ng-bootstrap'
+import {
+  NgbModal,
+  NgbModalRef,
+  NgbNavChangeEvent,
+  NgbNavModule,
+  NgbPopoverModule,
+} from '@ng-bootstrap/ng-bootstrap'
 import { DirtyComponent, dirtyCheck } from '@ngneat/dirty-check-forms'
+import { NgxBootstrapIconsModule } from 'ngx-bootstrap-icons'
 import { TourService } from 'ngx-ui-tour-ng-bootstrap'
 import {
   BehaviorSubject,
-  Subscription,
   Observable,
   Subject,
+  Subscription,
   first,
   takeUntil,
   tap,
 } from 'rxjs'
-import { PaperlessGroup } from 'src/app/data/paperless-group'
-import { PaperlessSavedView } from 'src/app/data/paperless-saved-view'
-import { SETTINGS_KEYS } from 'src/app/data/paperless-uisettings'
-import { PaperlessUser } from 'src/app/data/paperless-user'
+import { Group } from 'src/app/data/group'
+import {
+  SystemStatus,
+  SystemStatusItemStatus,
+} from 'src/app/data/system-status'
+import { GlobalSearchType, SETTINGS_KEYS } from 'src/app/data/ui-settings'
+import { User } from 'src/app/data/user'
+import { IfPermissionsDirective } from 'src/app/directives/if-permissions.directive'
+import { CustomDatePipe } from 'src/app/pipes/custom-date.pipe'
 import { DocumentListViewService } from 'src/app/services/document-list-view.service'
 import {
-  PermissionsService,
   PermissionAction,
   PermissionType,
+  PermissionsService,
 } from 'src/app/services/permissions.service'
 import { GroupService } from 'src/app/services/rest/group.service'
-import { SavedViewService } from 'src/app/services/rest/saved-view.service'
 import { UserService } from 'src/app/services/rest/user.service'
 import {
-  SettingsService,
   LanguageOption,
+  SettingsService,
 } from 'src/app/services/settings.service'
-import { ToastService, Toast } from 'src/app/services/toast.service'
+import { SystemStatusService } from 'src/app/services/system-status.service'
+import { Toast, ToastService } from 'src/app/services/toast.service'
+import { CheckComponent } from '../../common/input/check/check.component'
+import { ColorComponent } from '../../common/input/color/color.component'
+import { PermissionsGroupComponent } from '../../common/input/permissions/permissions-group/permissions-group.component'
+import { PermissionsUserComponent } from '../../common/input/permissions/permissions-user/permissions-user.component'
+import { SelectComponent } from '../../common/input/select/select.component'
+import { PageHeaderComponent } from '../../common/page-header/page-header.component'
+import { SystemStatusDialogComponent } from '../../common/system-status-dialog/system-status-dialog.component'
 import { ComponentWithPermissions } from '../../with-permissions/with-permissions.component'
 
 enum SettingsNavIDs {
@@ -48,19 +72,38 @@ enum SettingsNavIDs {
   SavedViews = 4,
 }
 
+const systemLanguage = { code: '', name: $localize`Use system language` }
+const systemDateFormat = {
+  code: '',
+  name: $localize`Use date format of display language`,
+}
+
 @Component({
   selector: 'pngx-settings',
   templateUrl: './settings.component.html',
   styleUrls: ['./settings.component.scss'],
+  imports: [
+    PageHeaderComponent,
+    CheckComponent,
+    ColorComponent,
+    SelectComponent,
+    PermissionsGroupComponent,
+    PermissionsUserComponent,
+    CustomDatePipe,
+    IfPermissionsDirective,
+    AsyncPipe,
+    FormsModule,
+    ReactiveFormsModule,
+    NgbNavModule,
+    NgbPopoverModule,
+    NgxBootstrapIconsModule,
+  ],
 })
 export class SettingsComponent
   extends ComponentWithPermissions
   implements OnInit, AfterViewInit, OnDestroy, DirtyComponent
 {
-  SettingsNavIDs = SettingsNavIDs
   activeNavID: number
-
-  savedViewGroup = new FormGroup({})
 
   settingsForm = new FormGroup({
     bulkEditConfirmationDialogs: new FormControl(null),
@@ -71,7 +114,6 @@ export class SettingsComponent
     darkModeEnabled: new FormControl(null),
     darkModeInvertThumbs: new FormControl(null),
     themeColor: new FormControl(null),
-    useNativePdfViewer: new FormControl(null),
     displayLanguage: new FormControl(null),
     dateLocale: new FormControl(null),
     dateFormat: new FormControl(null),
@@ -82,6 +124,11 @@ export class SettingsComponent
     defaultPermsViewGroups: new FormControl(null),
     defaultPermsEditUsers: new FormControl(null),
     defaultPermsEditGroups: new FormControl(null),
+    useNativePdfViewer: new FormControl(null),
+    documentEditingRemoveInboxTags: new FormControl(null),
+    documentEditingOverlayThumbnail: new FormControl(null),
+    searchDbOnly: new FormControl(null),
+    searchLink: new FormControl(null),
 
     notificationsConsumerNewDocument: new FormControl(null),
     notificationsConsumerSuccess: new FormControl(null),
@@ -89,10 +136,9 @@ export class SettingsComponent
     notificationsConsumerSuppressOnDashboard: new FormControl(null),
 
     savedViewsWarnOnUnsavedChange: new FormControl(null),
-    savedViews: this.savedViewGroup,
   })
 
-  savedViews: PaperlessSavedView[]
+  SettingsNavIDs = SettingsNavIDs
 
   store: BehaviorSubject<any>
   storeSub: Subscription
@@ -101,8 +147,22 @@ export class SettingsComponent
   unsubscribeNotifier: Subject<any> = new Subject()
   savePending: boolean = false
 
-  users: PaperlessUser[]
-  groups: PaperlessGroup[]
+  users: User[]
+  groups: Group[]
+
+  public systemStatus: SystemStatus
+
+  public readonly GlobalSearchType = GlobalSearchType
+
+  get systemStatusHasErrors(): boolean {
+    return (
+      this.systemStatus.database.status === SystemStatusItemStatus.ERROR ||
+      this.systemStatus.tasks.redis_status === SystemStatusItemStatus.ERROR ||
+      this.systemStatus.tasks.celery_status === SystemStatusItemStatus.ERROR ||
+      this.systemStatus.tasks.index_status === SystemStatusItemStatus.ERROR ||
+      this.systemStatus.tasks.classifier_status === SystemStatusItemStatus.ERROR
+    )
+  }
 
   get computedDateLocale(): string {
     return (
@@ -113,7 +173,6 @@ export class SettingsComponent
   }
 
   constructor(
-    public savedViewService: SavedViewService,
     private documentListViewService: DocumentListViewService,
     private toastService: ToastService,
     private settings: SettingsService,
@@ -124,7 +183,9 @@ export class SettingsComponent
     private usersService: UserService,
     private groupsService: GroupService,
     private router: Router,
-    public permissionsService: PermissionsService
+    public permissionsService: PermissionsService,
+    private modalService: NgbModal,
+    private systemStatusService: SystemStatusService
   ) {
     super()
     this.settings.settingsSaved.subscribe(() => {
@@ -173,18 +234,6 @@ export class SettingsComponent
         })
     }
 
-    if (
-      this.permissionsService.currentUserCan(
-        PermissionAction.View,
-        PermissionType.SavedView
-      )
-    ) {
-      this.savedViewService.listAll().subscribe((r) => {
-        this.savedViews = r.results
-        this.initialize(false)
-      })
-    }
-
     this.activatedRoute.paramMap.subscribe((paramMap) => {
       const section = paramMap.get('section')
       if (section) {
@@ -193,9 +242,6 @@ export class SettingsComponent
         )
         if (navIDKey) {
           this.activeNavID = SettingsNavIDs[navIDKey]
-        }
-        if (this.activeNavID === SettingsNavIDs.SavedViews) {
-          this.settings.organizingSidebarSavedViews = true
         }
       }
     })
@@ -265,7 +311,14 @@ export class SettingsComponent
       defaultPermsEditGroups: this.settings.get(
         SETTINGS_KEYS.DEFAULT_PERMS_EDIT_GROUPS
       ),
-      savedViews: {},
+      documentEditingRemoveInboxTags: this.settings.get(
+        SETTINGS_KEYS.DOCUMENT_EDITING_REMOVE_INBOX_TAGS
+      ),
+      documentEditingOverlayThumbnail: this.settings.get(
+        SETTINGS_KEYS.DOCUMENT_EDITING_OVERLAY_THUMBNAIL
+      ),
+      searchDbOnly: this.settings.get(SETTINGS_KEYS.SEARCH_DB_ONLY),
+      searchLink: this.settings.get(SETTINGS_KEYS.SEARCH_FULL_TYPE),
     }
   }
 
@@ -278,14 +331,10 @@ export class SettingsComponent
       this.router
         .navigate(['settings', foundNavIDkey.toLowerCase()])
         .then((navigated) => {
-          this.settings.organizingSidebarSavedViews = false
           if (!navigated && this.isDirty) {
             this.activeNavID = navChangeEvent.activeId
           } else if (navigated && this.isDirty) {
             this.initialize()
-          }
-          if (this.activeNavID === SettingsNavIDs.SavedViews) {
-            this.settings.organizingSidebarSavedViews = true
           }
         })
   }
@@ -296,28 +345,6 @@ export class SettingsComponent
     const currentFormValue = this.settingsForm.value
 
     let storeData = this.getCurrentSettings()
-
-    if (this.savedViews) {
-      this.emptyGroup(this.savedViewGroup)
-
-      for (let view of this.savedViews) {
-        storeData.savedViews[view.id.toString()] = {
-          id: view.id,
-          name: view.name,
-          show_on_dashboard: view.show_on_dashboard,
-          show_in_sidebar: view.show_in_sidebar,
-        }
-        this.savedViewGroup.addControl(
-          view.id.toString(),
-          new FormGroup({
-            id: new FormControl(null),
-            name: new FormControl(null),
-            show_on_dashboard: new FormControl(null),
-            show_in_sidebar: new FormControl(null),
-          })
-        )
-      }
-    }
 
     this.store = new BehaviorSubject(storeData)
 
@@ -350,34 +377,20 @@ export class SettingsComponent
       // prevents loss of unsaved changes
       this.settingsForm.patchValue(currentFormValue)
     }
-  }
 
-  private emptyGroup(group: FormGroup) {
-    Object.keys(group.controls).forEach((key) => group.removeControl(key))
+    if (this.permissionsService.isAdmin()) {
+      this.systemStatusService.get().subscribe((status) => {
+        this.systemStatus = status
+      })
+    }
   }
 
   ngOnDestroy() {
-    if (this.isDirty) this.settings.updateAppearanceSettings() // in case user changed appearance but didnt save
+    if (this.isDirty) this.settings.updateAppearanceSettings() // in case user changed appearance but didn't save
     this.storeSub && this.storeSub.unsubscribe()
-    this.settings.organizingSidebarSavedViews = false
   }
 
-  deleteSavedView(savedView: PaperlessSavedView) {
-    this.savedViewService.delete(savedView).subscribe(() => {
-      this.savedViewGroup.removeControl(savedView.id.toString())
-      this.savedViews.splice(this.savedViews.indexOf(savedView), 1)
-      this.toastService.showInfo(
-        $localize`Saved view "${savedView.name}" deleted.`
-      )
-      this.savedViewService.clearCache()
-      this.savedViewService.listAll().subscribe((r) => {
-        this.savedViews = r.results
-        this.initialize(true)
-      })
-    })
-  }
-
-  private saveLocalSettings() {
+  public saveSettings() {
     this.savePending = true
     const reloadRequired =
       this.settingsForm.value.displayLanguage !=
@@ -416,7 +429,7 @@ export class SettingsComponent
     )
     this.settings.set(
       SETTINGS_KEYS.THEME_COLOR,
-      this.settingsForm.value.themeColor.toString()
+      this.settingsForm.value.themeColor
     )
     this.settings.set(
       SETTINGS_KEYS.USE_NATIVE_PDF_VIEWER,
@@ -478,6 +491,22 @@ export class SettingsComponent
       SETTINGS_KEYS.DEFAULT_PERMS_EDIT_GROUPS,
       this.settingsForm.value.defaultPermsEditGroups
     )
+    this.settings.set(
+      SETTINGS_KEYS.DOCUMENT_EDITING_REMOVE_INBOX_TAGS,
+      this.settingsForm.value.documentEditingRemoveInboxTags
+    )
+    this.settings.set(
+      SETTINGS_KEYS.DOCUMENT_EDITING_OVERLAY_THUMBNAIL,
+      this.settingsForm.value.documentEditingOverlayThumbnail
+    )
+    this.settings.set(
+      SETTINGS_KEYS.SEARCH_DB_ONLY,
+      this.settingsForm.value.searchDbOnly
+    )
+    this.settings.set(
+      SETTINGS_KEYS.SEARCH_FULL_TYPE,
+      this.settingsForm.value.searchLink
+    )
     this.settings.setLanguage(this.settingsForm.value.displayLanguage)
     this.settings
       .storeSettings()
@@ -486,8 +515,8 @@ export class SettingsComponent
       .subscribe({
         next: () => {
           this.store.next(this.settingsForm.value)
-          this.documentListViewService.updatePageSize()
           this.settings.updateAppearanceSettings()
+          this.settings.initializeDisplayFields()
           let savedToast: Toast = {
             content: $localize`Settings were saved successfully.`,
             delay: 5000,
@@ -512,47 +541,32 @@ export class SettingsComponent
   }
 
   get displayLanguageOptions(): LanguageOption[] {
-    return [{ code: '', name: $localize`Use system language` }].concat(
-      this.settings.getLanguageOptions()
-    )
+    return [systemLanguage].concat(this.settings.getLanguageOptions())
   }
 
   get dateLocaleOptions(): LanguageOption[] {
-    return [
-      { code: '', name: $localize`Use date format of display language` },
-    ].concat(this.settings.getDateLocaleOptions())
+    return [systemDateFormat].concat(this.settings.getDateLocaleOptions())
   }
 
   get today() {
     return new Date()
   }
 
-  saveSettings() {
-    // only patch views that have actually changed
-    const changed: PaperlessSavedView[] = []
-    Object.values(this.savedViewGroup.controls)
-      .filter((g: FormGroup) => !g.pristine)
-      .forEach((group: FormGroup) => {
-        changed.push(group.value)
-      })
-    if (changed.length > 0) {
-      this.savedViewService.patchMany(changed).subscribe({
-        next: () => {
-          this.saveLocalSettings()
-        },
-        error: (error) => {
-          this.toastService.showError(
-            $localize`Error while storing settings on server.`,
-            error
-          )
-        },
-      })
-    } else {
-      this.saveLocalSettings()
-    }
+  reset() {
+    this.settingsForm.patchValue(this.store.getValue())
   }
 
   clearThemeColor() {
     this.settingsForm.get('themeColor').patchValue('')
+  }
+
+  showSystemStatus() {
+    const modal: NgbModalRef = this.modalService.open(
+      SystemStatusDialogComponent,
+      {
+        size: 'xl',
+      }
+    )
+    modal.componentInstance.status = this.systemStatus
   }
 }

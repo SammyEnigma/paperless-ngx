@@ -5,7 +5,6 @@ import shutil
 import stat
 
 from django.conf import settings
-from django.core.checks import Critical
 from django.core.checks import Error
 from django.core.checks import Warning
 from django.core.checks import register
@@ -63,7 +62,7 @@ def paths_check(app_configs, **kwargs):
 
     return (
         path_check("PAPERLESS_DATA_DIR", settings.DATA_DIR)
-        + path_check("PAPERLESS_TRASH_DIR", settings.TRASH_DIR)
+        + path_check("PAPERLESS_EMPTY_TRASH_DIR", settings.EMPTY_TRASH_DIR)
         + path_check("PAPERLESS_MEDIA_ROOT", settings.MEDIA_ROOT)
         + path_check("PAPERLESS_CONSUMPTION_DIR", settings.CONSUMPTION_DIR)
     )
@@ -79,7 +78,7 @@ def binaries_check(app_configs, **kwargs):
     error = "Paperless can't find {}. Without it, consumption is impossible."
     hint = "Either it's not in your ${PATH} or it's not installed."
 
-    binaries = (settings.CONVERT_BINARY, "tesseract")
+    binaries = (settings.CONVERT_BINARY, "tesseract", "gs")
 
     check_messages = []
     for binary in binaries:
@@ -95,8 +94,8 @@ def debug_mode_check(app_configs, **kwargs):
         return [
             Warning(
                 "DEBUG mode is enabled. Disable Debug mode. This is a serious "
-                "security issue, since it puts security overides in place which "
-                "are meant to be only used during development. This "
+                "security issue, since it puts security overrides in place "
+                "which are meant to be only used during development. This "
                 "also means that paperless will tell anyone various "
                 "debugging information when something goes wrong.",
             ),
@@ -205,13 +204,10 @@ def audit_log_check(app_configs, **kwargs):
     all_tables = db_conn.introspection.table_names()
     result = []
 
-    if ("auditlog_logentry" in all_tables) and not (settings.AUDIT_LOG_ENABLED):
+    if ("auditlog_logentry" in all_tables) and not settings.AUDIT_LOG_ENABLED:
         result.append(
-            Critical(
-                (
-                    "auditlog table was found but PAPERLESS_AUDIT_LOG_ENABLED"
-                    " is not active.  This setting cannot be disabled after enabling"
-                ),
+            Warning(
+                ("auditlog table was found but audit log is disabled."),
             ),
         )
 

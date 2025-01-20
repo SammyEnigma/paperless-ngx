@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http'
 import {
   Directive,
   OnDestroy,
@@ -7,33 +8,40 @@ import {
 } from '@angular/core'
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap'
 import { Subject } from 'rxjs'
-import { debounceTime, distinctUntilChanged, takeUntil } from 'rxjs/operators'
 import {
-  MatchingModel,
-  MATCHING_ALGORITHMS,
+  debounceTime,
+  delay,
+  distinctUntilChanged,
+  takeUntil,
+  tap,
+} from 'rxjs/operators'
+import {
   MATCH_AUTO,
   MATCH_NONE,
+  MATCHING_ALGORITHMS,
+  MatchingModel,
 } from 'src/app/data/matching-model'
 import { ObjectWithId } from 'src/app/data/object-with-id'
-import {
-  ObjectWithPermissions,
-  PermissionsObject,
-} from 'src/app/data/object-with-permissions'
+import { ObjectWithPermissions } from 'src/app/data/object-with-permissions'
 import {
   SortableDirective,
   SortEvent,
 } from 'src/app/directives/sortable.directive'
 import { DocumentListViewService } from 'src/app/services/document-list-view.service'
 import {
+  PermissionAction,
   PermissionsService,
   PermissionType,
 } from 'src/app/services/permissions.service'
-import { AbstractNameFilterService } from 'src/app/services/rest/abstract-name-filter-service'
+import {
+  AbstractNameFilterService,
+  BulkEditObjectOperation,
+} from 'src/app/services/rest/abstract-name-filter-service'
 import { ToastService } from 'src/app/services/toast.service'
 import { ConfirmDialogComponent } from '../../common/confirm-dialog/confirm-dialog.component'
 import { EditDialogMode } from '../../common/edit-dialog/edit-dialog.component'
-import { ComponentWithPermissions } from '../../with-permissions/with-permissions.component'
 import { PermissionsDialogComponent } from '../../common/permissions-dialog/permissions-dialog.component'
+import { LoadingComponentWithPermissions } from '../../loading-component/loading.component'
 
 export interface ManagementListColumn {
   key: string
@@ -43,15 +51,17 @@ export interface ManagementListColumn {
   valueFn: any
 
   rendersHtml?: boolean
+
+  hideOnMobile?: boolean
 }
 
 @Directive()
 export abstract class ManagementListComponent<T extends ObjectWithId>
-  extends ComponentWithPermissions
+  extends LoadingComponentWithPermissions
   implements OnInit, OnDestroy
 {
   constructor(
-    private service: AbstractNameFilterService<T>,
+    protected service: AbstractNameFilterService<T>,
     private modalService: NgbModal,
     private editDialogComponent: any,
     private toastService: ToastService,
@@ -77,13 +87,12 @@ export abstract class ManagementListComponent<T extends ObjectWithId>
   public sortField: string
   public sortReverse: boolean
 
-  public isLoading: boolean = false
-
   private nameFilterDebounce: Subject<string>
-  private unsubscribeNotifier: Subject<any> = new Subject()
-  private _nameFilter: string
+  protected unsubscribeNotifier: Subject<any> = new Subject()
+  protected _nameFilter: string
 
   public selectedObjects: Set<number> = new Set()
+  public togggleAll: boolean = false
 
   ngOnInit(): void {
     this.reloadData()
@@ -101,11 +110,6 @@ export abstract class ManagementListComponent<T extends ObjectWithId>
         this.page = 1
         this.reloadData()
       })
-  }
-
-  ngOnDestroy() {
-    this.unsubscribeNotifier.next(true)
-    this.unsubscribeNotifier.complete()
   }
 
   getMatching(o: MatchingModel) {
@@ -128,8 +132,9 @@ export abstract class ManagementListComponent<T extends ObjectWithId>
     this.reloadData()
   }
 
-  reloadData() {
-    this.isLoading = true
+  reloadData(extraParams: { [key: string]: any } = null) {
+    this.loading = true
+    this.clearSelection()
     this.service
       .listFiltered(
         this.page,
@@ -137,13 +142,28 @@ export abstract class ManagementListComponent<T extends ObjectWithId>
         this.sortField,
         this.sortReverse,
         this._nameFilter,
-        true
+        true,
+        extraParams
       )
-      .pipe(takeUntil(this.unsubscribeNotifier))
-      .subscribe((c) => {
-        this.data = c.results
-        this.collectionSize = c.count
-        this.isLoading = false
+      .pipe(
+        takeUntil(this.unsubscribeNotifier),
+        tap((c) => {
+          this.data = c.results
+          this.collectionSize = c.count
+        }),
+        delay(100)
+      )
+      .subscribe({
+        error: (error: HttpErrorResponse) => {
+          if (error.error?.detail?.includes('Invalid page')) {
+            this.page = 1
+            this.reloadData()
+          }
+        },
+        next: () => {
+          this.show = true
+          this.loading = false
+        },
       })
   }
 
@@ -247,7 +267,9 @@ export abstract class ManagementListComponent<T extends ObjectWithId>
     )
   }
 
-  get userOwnsAll(): boolean {
+  userCanBulkEdit(action: PermissionAction): boolean {
+    if (!this.permissionsService.currentUserCan(action, this.permissionType))
+      return false
     let ownsAll: boolean = true
     const objects = this.data.filter((o) => this.selectedObjects.has(o.id))
     ownsAll = objects.every((o) =>
@@ -265,6 +287,7 @@ export abstract class ManagementListComponent<T extends ObjectWithId>
   }
 
   clearSelection() {
+    this.togggleAll = false
     this.selectedObjects.clear()
   }
 
@@ -279,12 +302,14 @@ export abstract class ManagementListComponent<T extends ObjectWithId>
       backdrop: 'static',
     })
     modal.componentInstance.confirmClicked.subscribe(
-      (permissions: { owner: number; set_permissions: PermissionsObject }) => {
+      ({ permissions, merge }) => {
         modal.componentInstance.buttonsEnabled = false
         this.service
-          .bulk_update_permissions(
+          .bulk_edit_objects(
             Array.from(this.selectedObjects),
-            permissions
+            BulkEditObjectOperation.SetPermissions,
+            permissions,
+            merge
           )
           .subscribe({
             next: () => {
@@ -304,5 +329,38 @@ export abstract class ManagementListComponent<T extends ObjectWithId>
           })
       }
     )
+  }
+
+  delete() {
+    let modal = this.modalService.open(ConfirmDialogComponent, {
+      backdrop: 'static',
+    })
+    modal.componentInstance.title = $localize`Confirm delete`
+    modal.componentInstance.messageBold = $localize`This operation will permanently delete all objects.`
+    modal.componentInstance.message = $localize`This operation cannot be undone.`
+    modal.componentInstance.btnClass = 'btn-danger'
+    modal.componentInstance.btnCaption = $localize`Proceed`
+    modal.componentInstance.confirmClicked.subscribe(() => {
+      modal.componentInstance.buttonsEnabled = false
+      this.service
+        .bulk_edit_objects(
+          Array.from(this.selectedObjects),
+          BulkEditObjectOperation.Delete
+        )
+        .subscribe({
+          next: () => {
+            modal.close()
+            this.toastService.showInfo($localize`Objects deleted successfully`)
+            this.reloadData()
+          },
+          error: (error) => {
+            modal.componentInstance.buttonsEnabled = true
+            this.toastService.showError(
+              $localize`Error deleting objects`,
+              error
+            )
+          },
+        })
+    })
   }
 }

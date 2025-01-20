@@ -1,38 +1,43 @@
+import { CdkDragDrop, DragDropModule } from '@angular/cdk/drag-drop'
+import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http'
 import {
-  HttpClientTestingModule,
   HttpTestingController,
+  provideHttpClientTesting,
 } from '@angular/common/http/testing'
-import { AppFrameComponent } from './app-frame.component'
 import {
   ComponentFixture,
   TestBed,
   fakeAsync,
   tick,
 } from '@angular/core/testing'
-import { NgbModal, NgbModalModule, NgbModule } from '@ng-bootstrap/ng-bootstrap'
-import { BrowserModule } from '@angular/platform-browser'
-import { RouterTestingModule } from '@angular/router/testing'
-import { SettingsService } from 'src/app/services/settings.service'
-import { SavedViewService } from 'src/app/services/rest/saved-view.service'
-import { PermissionsService } from 'src/app/services/permissions.service'
-import { SETTINGS_KEYS } from 'src/app/data/paperless-uisettings'
-import { RemoteVersionService } from 'src/app/services/rest/remote-version.service'
-import { IfPermissionsDirective } from 'src/app/directives/if-permissions.directive'
 import { FormsModule, ReactiveFormsModule } from '@angular/forms'
+import { BrowserModule } from '@angular/platform-browser'
+import { ActivatedRoute, Router } from '@angular/router'
+import { RouterTestingModule } from '@angular/router/testing'
+import { NgbModal, NgbModalModule, NgbModule } from '@ng-bootstrap/ng-bootstrap'
+import { NgxBootstrapIconsModule, allIcons } from 'ngx-bootstrap-icons'
 import { of, throwError } from 'rxjs'
+import { routes } from 'src/app/app-routing.module'
+import { SavedView } from 'src/app/data/saved-view'
+import { SETTINGS_KEYS } from 'src/app/data/ui-settings'
+import { IfPermissionsDirective } from 'src/app/directives/if-permissions.directive'
+import { PermissionsGuard } from 'src/app/guards/permissions.guard'
+import {
+  DjangoMessageLevel,
+  DjangoMessagesService,
+} from 'src/app/services/django-messages.service'
+import { OpenDocumentsService } from 'src/app/services/open-documents.service'
+import { PermissionsService } from 'src/app/services/permissions.service'
+import { RemoteVersionService } from 'src/app/services/rest/remote-version.service'
+import { SavedViewService } from 'src/app/services/rest/saved-view.service'
+import { SearchService } from 'src/app/services/rest/search.service'
+import { SettingsService } from 'src/app/services/settings.service'
 import { ToastService } from 'src/app/services/toast.service'
 import { environment } from 'src/environments/environment'
-import { OpenDocumentsService } from 'src/app/services/open-documents.service'
-import { ActivatedRoute, Router } from '@angular/router'
-import { DocumentDetailComponent } from '../document-detail/document-detail.component'
-import { SearchService } from 'src/app/services/rest/search.service'
-import { DocumentListViewService } from 'src/app/services/document-list-view.service'
-import { FILTER_FULLTEXT_QUERY } from 'src/app/data/filter-rule-type'
-import { routes } from 'src/app/app-routing.module'
-import { PermissionsGuard } from 'src/app/guards/permissions.guard'
-import { CdkDragDrop, DragDropModule } from '@angular/cdk/drag-drop'
-import { PaperlessSavedView } from 'src/app/data/paperless-saved-view'
 import { ProfileEditDialogComponent } from '../common/profile-edit-dialog/profile-edit-dialog.component'
+import { DocumentDetailComponent } from '../document-detail/document-detail.component'
+import { AppFrameComponent } from './app-frame.component'
+import { GlobalSearchComponent } from './global-search/global-search.component'
 
 const saved_views = [
   {
@@ -82,18 +87,15 @@ describe('AppFrameComponent', () => {
   let permissionsService: PermissionsService
   let remoteVersionService: RemoteVersionService
   let toastService: ToastService
+  let messagesService: DjangoMessagesService
   let openDocumentsService: OpenDocumentsService
-  let searchService: SearchService
-  let documentListViewService: DocumentListViewService
   let router: Router
   let savedViewSpy
   let modalService: NgbModal
 
   beforeEach(async () => {
     TestBed.configureTestingModule({
-      declarations: [AppFrameComponent, IfPermissionsDirective],
       imports: [
-        HttpClientTestingModule,
         BrowserModule,
         RouterTestingModule.withRoutes(routes),
         NgbModule,
@@ -101,13 +103,17 @@ describe('AppFrameComponent', () => {
         ReactiveFormsModule,
         DragDropModule,
         NgbModalModule,
+        NgxBootstrapIconsModule.pick(allIcons),
+        AppFrameComponent,
+        IfPermissionsDirective,
+        GlobalSearchComponent,
       ],
       providers: [
         SettingsService,
         {
           provide: SavedViewService,
           useValue: {
-            initialize: () => {},
+            reload: () => {},
             listAll: () =>
               of({
                 all: [saved_views.map((v) => v.id)],
@@ -121,6 +127,7 @@ describe('AppFrameComponent', () => {
         RemoteVersionService,
         IfPermissionsDirective,
         ToastService,
+        DjangoMessagesService,
         OpenDocumentsService,
         SearchService,
         NgbModal,
@@ -141,6 +148,8 @@ describe('AppFrameComponent', () => {
           },
         },
         PermissionsGuard,
+        provideHttpClient(withInterceptorsFromDi()),
+        provideHttpClientTesting(),
       ],
     }).compileComponents()
 
@@ -149,9 +158,8 @@ describe('AppFrameComponent', () => {
     permissionsService = TestBed.inject(PermissionsService)
     remoteVersionService = TestBed.inject(RemoteVersionService)
     toastService = TestBed.inject(ToastService)
+    messagesService = TestBed.inject(DjangoMessagesService)
     openDocumentsService = TestBed.inject(OpenDocumentsService)
-    searchService = TestBed.inject(SearchService)
-    documentListViewService = TestBed.inject(DocumentListViewService)
     modalService = TestBed.inject(NgbModal)
     router = TestBed.inject(Router)
 
@@ -160,7 +168,7 @@ describe('AppFrameComponent', () => {
       .mockReturnValue('Hello World')
     jest.spyOn(permissionsService, 'currentUserCan').mockReturnValue(true)
 
-    savedViewSpy = jest.spyOn(savedViewService, 'initialize')
+    savedViewSpy = jest.spyOn(savedViewService, 'reload')
 
     fixture = TestBed.createComponent(AppFrameComponent)
     component = fixture.componentInstance
@@ -248,7 +256,7 @@ describe('AppFrameComponent', () => {
     expect(toastSpy).toHaveBeenCalled()
   })
 
-  it('should support collapsable menu', () => {
+  it('should support collapsible menu', () => {
     const button: HTMLButtonElement = (
       fixture.nativeElement as HTMLDivElement
     ).querySelector('button[data-toggle=collapse]')
@@ -287,47 +295,6 @@ describe('AppFrameComponent', () => {
     expect(component.canDeactivate()).toBeFalsy()
   })
 
-  it('should call autocomplete endpoint on input', fakeAsync(() => {
-    const autocompleteSpy = jest.spyOn(searchService, 'autocomplete')
-    component.searchAutoComplete(of('hello')).subscribe()
-    tick(250)
-    expect(autocompleteSpy).toHaveBeenCalled()
-
-    component.searchAutoComplete(of('hello world 1')).subscribe()
-    tick(250)
-    expect(autocompleteSpy).toHaveBeenCalled()
-  }))
-
-  it('should support reset search field', () => {
-    const resetSpy = jest.spyOn(component, 'resetSearchField')
-    const input = (fixture.nativeElement as HTMLDivElement).querySelector(
-      'input'
-    ) as HTMLInputElement
-    input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Escape' }))
-    expect(resetSpy).toHaveBeenCalled()
-  })
-
-  it('should support choosing a search item', () => {
-    expect(component.searchField.value).toEqual('')
-    component.itemSelected({ item: 'hello', preventDefault: () => true })
-    expect(component.searchField.value).toEqual('hello ')
-    component.itemSelected({ item: 'world', preventDefault: () => true })
-    expect(component.searchField.value).toEqual('hello world ')
-  })
-
-  it('should navigate via quickFilter on search', () => {
-    const str = 'hello world '
-    component.searchField.patchValue(str)
-    const qfSpy = jest.spyOn(documentListViewService, 'quickFilter')
-    component.search()
-    expect(qfSpy).toHaveBeenCalledWith([
-      {
-        rule_type: FILTER_FULLTEXT_QUERY,
-        value: str.trim(),
-      },
-    ])
-  })
-
   it('should disable global dropzone on start drag + drop, re-enable after', () => {
     expect(settingsService.globalDropzoneEnabled).toBeTruthy()
     component.onDragStart(null)
@@ -341,7 +308,7 @@ describe('AppFrameComponent', () => {
     const toastSpy = jest.spyOn(toastService, 'showInfo')
     jest.spyOn(settingsService, 'storeSettings').mockReturnValue(of(true))
     component.onDrop({ previousIndex: 0, currentIndex: 1 } as CdkDragDrop<
-      PaperlessSavedView[]
+      SavedView[]
     >)
     expect(settingsSpy).toHaveBeenCalledWith([
       saved_views[2],
@@ -364,7 +331,7 @@ describe('AppFrameComponent', () => {
       .spyOn(settingsService, 'storeSettings')
       .mockReturnValue(throwError(() => new Error('unable to save')))
     component.onDrop({ previousIndex: 0, currentIndex: 2 } as CdkDragDrop<
-      PaperlessSavedView[]
+      SavedView[]
     >)
     expect(toastSpy).toHaveBeenCalled()
   })
@@ -374,6 +341,22 @@ describe('AppFrameComponent', () => {
     component.editProfile()
     expect(modalSpy).toHaveBeenCalledWith(ProfileEditDialogComponent, {
       backdrop: 'static',
+      size: 'xl',
     })
+  })
+
+  it('should show toasts for django messages', () => {
+    const toastErrorSpy = jest.spyOn(toastService, 'showError')
+    const toastInfoSpy = jest.spyOn(toastService, 'showInfo')
+    jest.spyOn(messagesService, 'get').mockReturnValue([
+      { level: DjangoMessageLevel.WARNING, message: 'Test warning' },
+      { level: DjangoMessageLevel.ERROR, message: 'Test error' },
+      { level: DjangoMessageLevel.SUCCESS, message: 'Test success' },
+      { level: DjangoMessageLevel.INFO, message: 'Test info' },
+      { level: DjangoMessageLevel.DEBUG, message: 'Test debug' },
+    ])
+    component.ngOnInit()
+    expect(toastErrorSpy).toHaveBeenCalledTimes(2)
+    expect(toastInfoSpy).toHaveBeenCalledTimes(3)
   })
 })

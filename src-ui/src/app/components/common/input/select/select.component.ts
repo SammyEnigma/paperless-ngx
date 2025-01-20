@@ -5,7 +5,14 @@ import {
   Input,
   Output,
 } from '@angular/core'
-import { NG_VALUE_ACCESSOR } from '@angular/forms'
+import {
+  FormsModule,
+  NG_VALUE_ACCESSOR,
+  ReactiveFormsModule,
+} from '@angular/forms'
+import { RouterModule } from '@angular/router'
+import { NgSelectModule } from '@ng-select/ng-select'
+import { NgxBootstrapIconsModule } from 'ngx-bootstrap-icons'
 import { AbstractInputComponent } from '../abstract-input'
 
 @Component({
@@ -19,6 +26,13 @@ import { AbstractInputComponent } from '../abstract-input'
   selector: 'pngx-input-select',
   templateUrl: './select.component.html',
   styleUrls: ['./select.component.scss'],
+  imports: [
+    NgSelectModule,
+    FormsModule,
+    ReactiveFormsModule,
+    RouterModule,
+    NgxBootstrapIconsModule,
+  ],
 })
 export class SelectComponent extends AbstractInputComponent<number> {
   constructor() {
@@ -94,6 +108,9 @@ export class SelectComponent extends AbstractInputComponent<number> {
   @Input()
   disableCreateNew: boolean = false
 
+  @Input()
+  hideAddButton: boolean = false
+
   @Output()
   createNew = new EventEmitter<string>()
 
@@ -122,7 +139,7 @@ export class SelectComponent extends AbstractInputComponent<number> {
     }
   }
 
-  addItem(name: string) {
+  addItem(name: string = null) {
     if (name) this.createNew.next(name)
     else this.createNew.next(this._lastSearchTerm)
     this.clearLastSearchTerm()

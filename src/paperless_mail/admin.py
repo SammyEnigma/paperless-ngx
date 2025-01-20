@@ -9,11 +9,9 @@ from paperless_mail.models import ProcessedMail
 
 
 class MailAccountAdminForm(forms.ModelForm):
-
     """Metadata classes used by Django admin to display the form."""
 
     class Meta:
-
         """Metadata class used by Django admin to display the form."""
 
         model = MailAccount
@@ -55,7 +53,7 @@ class MailRuleAdmin(GuardedModelAdmin):
     }
 
     fieldsets = (
-        (None, {"fields": ("name", "order", "account", "folder")}),
+        (None, {"fields": ("name", "order", "account", "enabled", "folder")}),
         (
             _("Filter"),
             {
@@ -118,6 +116,10 @@ class MailRuleAdmin(GuardedModelAdmin):
     sortable_by = []
 
     ordering = ["order"]
+
+    raw_id_fields = ("assign_correspondent", "assign_document_type")
+
+    filter_horizontal = ("assign_tags",)
 
 
 class ProcessedMailAdmin(admin.ModelAdmin):

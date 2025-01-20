@@ -1,17 +1,18 @@
+import { Clipboard } from '@angular/cdk/clipboard'
+import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http'
+import { provideHttpClientTesting } from '@angular/common/http/testing'
 import {
+  ComponentFixture,
   TestBed,
   discardPeriodicTasks,
   fakeAsync,
   flush,
   tick,
 } from '@angular/core/testing'
+import { NgxBootstrapIconsModule, allIcons } from 'ngx-bootstrap-icons'
+import { of } from 'rxjs'
 import { ToastService } from 'src/app/services/toast.service'
 import { ToastsComponent } from './toasts.component'
-import { ComponentFixture } from '@angular/core/testing'
-import { HttpClientTestingModule } from '@angular/common/http/testing'
-import { of } from 'rxjs'
-import { NgbModule } from '@ng-bootstrap/ng-bootstrap'
-import { Clipboard } from '@angular/cdk/clipboard'
 
 const toasts = [
   {
@@ -44,8 +45,7 @@ describe('ToastsComponent', () => {
 
   beforeEach(async () => {
     TestBed.configureTestingModule({
-      declarations: [ToastsComponent],
-      imports: [HttpClientTestingModule, NgbModule],
+      imports: [ToastsComponent, NgxBootstrapIconsModule.pick(allIcons)],
       providers: [
         {
           provide: ToastService,
@@ -53,6 +53,8 @@ describe('ToastsComponent', () => {
             getToasts: () => of(toasts),
           },
         },
+        provideHttpClient(withInterceptorsFromDi()),
+        provideHttpClientTesting(),
       ],
     }).compileComponents()
 

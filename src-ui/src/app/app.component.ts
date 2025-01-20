@@ -1,22 +1,31 @@
-import { SettingsService } from './services/settings.service'
-import { SETTINGS_KEYS } from './data/paperless-uisettings'
 import { Component, OnDestroy, OnInit, Renderer2 } from '@angular/core'
-import { Router } from '@angular/router'
-import { Subscription, first } from 'rxjs'
+import { Router, RouterOutlet } from '@angular/router'
+import { TourNgBootstrapModule, TourService } from 'ngx-ui-tour-ng-bootstrap'
+import { first, Subscription } from 'rxjs'
+import { ToastsComponent } from './components/common/toasts/toasts.component'
+import { FileDropComponent } from './components/file-drop/file-drop.component'
+import { SETTINGS_KEYS } from './data/ui-settings'
 import { ConsumerStatusService } from './services/consumer-status.service'
-import { ToastService } from './services/toast.service'
-import { TasksService } from './services/tasks.service'
-import { TourService } from 'ngx-ui-tour-ng-bootstrap'
+import { HotKeyService } from './services/hot-key.service'
 import {
   PermissionAction,
   PermissionsService,
   PermissionType,
 } from './services/permissions.service'
+import { SettingsService } from './services/settings.service'
+import { TasksService } from './services/tasks.service'
+import { ToastService } from './services/toast.service'
 
 @Component({
   selector: 'pngx-root',
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss'],
+  imports: [
+    FileDropComponent,
+    ToastsComponent,
+    TourNgBootstrapModule,
+    RouterOutlet,
+  ],
 })
 export class AppComponent implements OnInit, OnDestroy {
   newDocumentSubscription: Subscription
@@ -31,10 +40,11 @@ export class AppComponent implements OnInit, OnDestroy {
     private tasksService: TasksService,
     public tourService: TourService,
     private renderer: Renderer2,
-    private permissionsService: PermissionsService
+    private permissionsService: PermissionsService,
+    private hotKeyService: HotKeyService
   ) {
     let anyWindow = window as any
-    anyWindow.pdfWorkerSrc = 'assets/js/pdf.worker.min.js'
+    anyWindow.pdfWorkerSrc = 'assets/js/pdf.worker.min.mjs'
     this.settings.updateAppearanceSettings()
   }
 
@@ -125,6 +135,36 @@ export class AppComponent implements OnInit, OnDestroy {
         }
       })
 
+    this.hotKeyService
+      .addShortcut({ keys: 'h', description: $localize`Dashboard` })
+      .subscribe(() => {
+        this.router.navigate(['/dashboard'])
+      })
+    if (
+      this.permissionsService.currentUserCan(
+        PermissionAction.View,
+        PermissionType.Document
+      )
+    ) {
+      this.hotKeyService
+        .addShortcut({ keys: 'd', description: $localize`Documents` })
+        .subscribe(() => {
+          this.router.navigate(['/documents'])
+        })
+    }
+    if (
+      this.permissionsService.currentUserCan(
+        PermissionAction.Change,
+        PermissionType.UISettings
+      )
+    ) {
+      this.hotKeyService
+        .addShortcut({ keys: 's', description: $localize`Settings` })
+        .subscribe(() => {
+          this.router.navigate(['/settings'])
+        })
+    }
+
     const prevBtnTitle = $localize`Prev`
     const nextBtnTitle = $localize`Next`
     const endBtnTitle = $localize`End`
@@ -133,7 +173,7 @@ export class AppComponent implements OnInit, OnDestroy {
       [
         {
           anchorId: 'tour.dashboard',
-          content: $localize`The dashboard can be used to show saved views, such as an 'Inbox'. Those settings are found under Settings > Saved Views once you have created some.`,
+          content: $localize`The dashboard can be used to show saved views, such as an 'Inbox'. Views are found under Manage > Saved Views once you have created some.`,
           route: '/dashboard',
           delayAfterNavigation: 500,
           isOptional: false,
@@ -178,9 +218,9 @@ export class AppComponent implements OnInit, OnDestroy {
           },
         },
         {
-          anchorId: 'tour.consumption-templates',
-          content: $localize`Consumption templates give you finer control over the document ingestion process.`,
-          route: '/templates',
+          anchorId: 'tour.workflows',
+          content: $localize`Workflows give you more control over the document pipeline.`,
+          route: '/workflows',
           backdropConfig: {
             offset: 0,
           },
@@ -195,7 +235,7 @@ export class AppComponent implements OnInit, OnDestroy {
         },
         {
           anchorId: 'tour.settings',
-          content: $localize`Check out the settings for various tweaks to the web app and toggle settings for saved views.`,
+          content: $localize`Check out the settings for various tweaks to the web app.`,
           route: '/settings',
           backdropConfig: {
             offset: 0,

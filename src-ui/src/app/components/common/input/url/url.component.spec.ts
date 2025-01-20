@@ -1,9 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing'
 import {
   FormsModule,
-  ReactiveFormsModule,
   NG_VALUE_ACCESSOR,
+  ReactiveFormsModule,
 } from '@angular/forms'
+import { NgxBootstrapIconsModule, allIcons } from 'ngx-bootstrap-icons'
 import { UrlComponent } from './url.component'
 
 describe('TextComponent', () => {
@@ -13,9 +14,13 @@ describe('TextComponent', () => {
 
   beforeEach(async () => {
     TestBed.configureTestingModule({
-      declarations: [UrlComponent],
       providers: [],
-      imports: [FormsModule, ReactiveFormsModule],
+      imports: [
+        FormsModule,
+        ReactiveFormsModule,
+        NgxBootstrapIconsModule.pick(allIcons),
+        UrlComponent,
+      ],
     }).compileComponents()
 
     fixture = TestBed.createComponent(UrlComponent)
@@ -27,7 +32,7 @@ describe('TextComponent', () => {
 
   it('should support use of input field', () => {
     expect(component.value).toBeUndefined()
-    // TODO: why doesnt this work?
+    // TODO: why doesn't this work?
     // input.value = 'foo'
     // input.dispatchEvent(new Event('change'))
     // fixture.detectChanges()

@@ -2,7 +2,6 @@ import os
 import shutil
 import tempfile
 import uuid
-from contextlib import AbstractContextManager
 from pathlib import Path
 from unittest import mock
 
@@ -16,28 +15,6 @@ from documents.tests.utils import DirectoriesMixin
 from documents.tests.utils import FileSystemAssertsMixin
 from paperless_tesseract.parsers import RasterisedDocumentParser
 from paperless_tesseract.parsers import post_process_text
-
-image_to_string_calls = []
-
-
-def fake_convert(input_file, output_file, **kwargs):
-    with open(input_file) as f:
-        lines = f.readlines()
-
-    for i, line in enumerate(lines):
-        with open(output_file % i, "w") as f2:
-            f2.write(line.strip())
-
-
-class FakeImageFile(AbstractContextManager):
-    def __init__(self, fname):
-        self.fname = fname
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        pass
-
-    def __enter__(self):
-        return os.path.basename(self.fname)
 
 
 class TestParser(DirectoriesMixin, FileSystemAssertsMixin, TestCase):
@@ -68,11 +45,7 @@ class TestParser(DirectoriesMixin, FileSystemAssertsMixin, TestCase):
             self.assertEqual(
                 result,
                 actual_result,
-                "strip_exceess_whitespace({}) != '{}', but '{}'".format(
-                    source,
-                    result,
-                    actual_result,
-                ),
+                f"strip_exceess_whitespace({source}) != '{result}', but '{actual_result}'",
             )
 
     def test_get_text_from_pdf(self):
@@ -83,6 +56,48 @@ class TestParser(DirectoriesMixin, FileSystemAssertsMixin, TestCase):
         )
 
         self.assertContainsStrings(text.strip(), ["This is a test document."])
+
+    def test_get_page_count(self):
+        """
+        GIVEN:
+            - PDF file with a single page
+            - PDF file with multiple pages
+        WHEN:
+            - The number of pages is requested
+        THEN:
+            - The method returns 1 as the expected number of pages
+            - The method returns the correct number of pages (6)
+        """
+        parser = RasterisedDocumentParser(uuid.uuid4())
+        page_count = parser.get_page_count(
+            os.path.join(self.SAMPLE_FILES, "simple-digital.pdf"),
+            "application/pdf",
+        )
+        self.assertEqual(page_count, 1)
+
+        page_count = parser.get_page_count(
+            os.path.join(self.SAMPLE_FILES, "multi-page-mixed.pdf"),
+            "application/pdf",
+        )
+        self.assertEqual(page_count, 6)
+
+    def test_get_page_count_password_protected(self):
+        """
+        GIVEN:
+            - Password protected PDF file
+        WHEN:
+            - The number of pages is requested
+        THEN:
+            - The method returns None
+        """
+        parser = RasterisedDocumentParser(uuid.uuid4())
+        with self.assertLogs("paperless.parsing.tesseract", level="WARNING") as cm:
+            page_count = parser.get_page_count(
+                os.path.join(self.SAMPLE_FILES, "password-protected.pdf"),
+                "application/pdf",
+            )
+            self.assertEqual(page_count, None)
+            self.assertIn("Unable to determine PDF page count", cm.output[0])
 
     def test_thumbnail(self):
         parser = RasterisedDocumentParser(uuid.uuid4())
@@ -269,7 +284,7 @@ class TestParser(DirectoriesMixin, FileSystemAssertsMixin, TestCase):
 
         self.assertRaises(ParseError, f)
 
-    @override_settings(OCR_IMAGE_DPI=72)
+    @override_settings(OCR_IMAGE_DPI=72, MAX_IMAGE_PIXELS=0)
     def test_image_no_dpi_default(self):
         parser = RasterisedDocumentParser(None)
 
@@ -769,43 +784,52 @@ class TestParser(DirectoriesMixin, FileSystemAssertsMixin, TestCase):
         self.assertEqual(params["sidecar"], "sidecar.txt")
 
         with override_settings(OCR_CLEAN="none"):
+            parser = RasterisedDocumentParser(None)
             params = parser.construct_ocrmypdf_parameters("", "", "", "")
             self.assertNotIn("clean", params)
             self.assertNotIn("clean_final", params)
 
         with override_settings(OCR_CLEAN="clean"):
+            parser = RasterisedDocumentParser(None)
             params = parser.construct_ocrmypdf_parameters("", "", "", "")
             self.assertTrue(params["clean"])
             self.assertNotIn("clean_final", params)
 
         with override_settings(OCR_CLEAN="clean-final", OCR_MODE="skip"):
+            parser = RasterisedDocumentParser(None)
             params = parser.construct_ocrmypdf_parameters("", "", "", "")
             self.assertTrue(params["clean_final"])
             self.assertNotIn("clean", params)
 
         with override_settings(OCR_CLEAN="clean-final", OCR_MODE="redo"):
+            parser = RasterisedDocumentParser(None)
             params = parser.construct_ocrmypdf_parameters("", "", "", "")
             self.assertTrue(params["clean"])
             self.assertNotIn("clean_final", params)
 
         with override_settings(OCR_DESKEW=True, OCR_MODE="skip"):
+            parser = RasterisedDocumentParser(None)
             params = parser.construct_ocrmypdf_parameters("", "", "", "")
             self.assertTrue(params["deskew"])
 
         with override_settings(OCR_DESKEW=True, OCR_MODE="redo"):
+            parser = RasterisedDocumentParser(None)
             params = parser.construct_ocrmypdf_parameters("", "", "", "")
             self.assertNotIn("deskew", params)
 
         with override_settings(OCR_DESKEW=False, OCR_MODE="skip"):
+            parser = RasterisedDocumentParser(None)
             params = parser.construct_ocrmypdf_parameters("", "", "", "")
             self.assertNotIn("deskew", params)
 
         with override_settings(OCR_MAX_IMAGE_PIXELS=1_000_001.0):
+            parser = RasterisedDocumentParser(None)
             params = parser.construct_ocrmypdf_parameters("", "", "", "")
             self.assertIn("max_image_mpixels", params)
             self.assertAlmostEqual(params["max_image_mpixels"], 1, places=4)
 
         with override_settings(OCR_MAX_IMAGE_PIXELS=-1_000_001.0):
+            parser = RasterisedDocumentParser(None)
             params = parser.construct_ocrmypdf_parameters("", "", "", "")
             self.assertNotIn("max_image_mpixels", params)
 

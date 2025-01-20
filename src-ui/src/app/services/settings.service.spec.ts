@@ -1,29 +1,49 @@
+import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http'
 import {
   HttpTestingController,
-  HttpClientTestingModule,
+  provideHttpClientTesting,
 } from '@angular/common/http/testing'
-import { TestBed } from '@angular/core/testing'
+import { fakeAsync, TestBed, tick } from '@angular/core/testing'
 import { FormsModule, ReactiveFormsModule } from '@angular/forms'
 import { RouterTestingModule } from '@angular/router/testing'
 import { NgbModule } from '@ng-bootstrap/ng-bootstrap'
 import { CookieService } from 'ngx-cookie-service'
-import { Subscription } from 'rxjs'
+import { of, Subscription } from 'rxjs'
 import { environment } from 'src/environments/environment'
-import { AppModule } from '../app.module'
-import {
-  PaperlessUiSettings,
-  SETTINGS_KEYS,
-} from '../data/paperless-uisettings'
+import { CustomFieldDataType } from '../data/custom-field'
+import { DEFAULT_DISPLAY_FIELDS, DisplayField } from '../data/document'
+import { SavedView } from '../data/saved-view'
+import { SETTINGS_KEYS, UiSettings } from '../data/ui-settings'
+import { PermissionsService } from './permissions.service'
+import { CustomFieldsService } from './rest/custom-fields.service'
 import { SettingsService } from './settings.service'
-import { PaperlessSavedView } from '../data/paperless-saved-view'
+import { ToastService } from './toast.service'
+
+const customFields = [
+  {
+    id: 1,
+    name: 'Field 1',
+    created: new Date(),
+    data_type: CustomFieldDataType.Monetary,
+  },
+  {
+    id: 2,
+    name: 'Field 2',
+    created: new Date(),
+    data_type: CustomFieldDataType.String,
+  },
+]
 
 describe('SettingsService', () => {
   let httpTestingController: HttpTestingController
   let settingsService: SettingsService
   let cookieService: CookieService
+  let customFieldsService: CustomFieldsService
+  let permissionService: PermissionsService
   let subscription: Subscription
+  let toastService: ToastService
 
-  const ui_settings: PaperlessUiSettings = {
+  const ui_settings: UiSettings = {
     user: {
       username: 'testuser',
       first_name: 'Test',
@@ -50,6 +70,7 @@ describe('SettingsService', () => {
       update_checking: { enabled: false, backend_setting: 'default' },
       saved_views: { warn_on_unsaved_change: true },
       notes_enabled: true,
+      auditlog_enabled: true,
       tour_complete: false,
       permissions: {
         default_owner: null,
@@ -65,25 +86,33 @@ describe('SettingsService', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
       declarations: [],
-      providers: [SettingsService, CookieService],
       imports: [
-        HttpClientTestingModule,
         RouterTestingModule,
         NgbModule,
         FormsModule,
         ReactiveFormsModule,
-        AppModule,
+      ],
+      providers: [
+        SettingsService,
+        CookieService,
+        provideHttpClient(withInterceptorsFromDi()),
+        provideHttpClientTesting(),
       ],
     })
 
     httpTestingController = TestBed.inject(HttpTestingController)
     cookieService = TestBed.inject(CookieService)
+    customFieldsService = TestBed.inject(CustomFieldsService)
+    permissionService = TestBed.inject(PermissionsService)
     settingsService = TestBed.inject(SettingsService)
+    toastService = TestBed.inject(ToastService)
+    // Normally done in app initializer
+    settingsService.initializeSettings().subscribe()
   })
 
   afterEach(() => {
     subscription?.unsubscribe()
-    httpTestingController.verify()
+    // httpTestingController.verify()
   })
 
   it('calls ui_settings api endpoint on initialize', () => {
@@ -92,6 +121,18 @@ describe('SettingsService', () => {
     )
     expect(req.request.method).toEqual('GET')
   })
+
+  it('should catch error and show toast on retrieve ui_settings error', fakeAsync(() => {
+    const toastSpy = jest.spyOn(toastService, 'showError')
+    httpTestingController
+      .expectOne(`${environment.apiBaseUrl}ui_settings/`)
+      .flush(
+        { detail: 'You do not have permission to perform this action.' },
+        { status: 403, statusText: 'Forbidden' }
+      )
+    tick(500)
+    expect(toastSpy).toHaveBeenCalled()
+  }))
 
   it('calls ui_settings api endpoint with POST on store', () => {
     let req = httpTestingController.expectOne(
@@ -285,16 +326,16 @@ describe('SettingsService', () => {
       .flush(ui_settings)
     const setSpy = jest.spyOn(settingsService, 'set')
     settingsService.updateDashboardViewsSort([
-      { id: 1 } as PaperlessSavedView,
-      { id: 4 } as PaperlessSavedView,
+      { id: 1 } as SavedView,
+      { id: 4 } as SavedView,
     ])
     expect(setSpy).toHaveBeenCalledWith(
       SETTINGS_KEYS.DASHBOARD_VIEWS_SORT_ORDER,
       [1, 4]
     )
     settingsService.updateSidebarViewsSort([
-      { id: 1 } as PaperlessSavedView,
-      { id: 4 } as PaperlessSavedView,
+      { id: 1 } as SavedView,
+      { id: 4 } as SavedView,
     ])
     expect(setSpy).toHaveBeenCalledWith(
       SETTINGS_KEYS.SIDEBAR_VIEWS_SORT_ORDER,
@@ -303,5 +344,64 @@ describe('SettingsService', () => {
     httpTestingController
       .expectOne(`${environment.apiBaseUrl}ui_settings/`)
       .flush(ui_settings)
+  })
+
+  it('should update environment app title if set', () => {
+    const settings = Object.assign({}, ui_settings)
+    settings.settings['app_title'] = 'FooBar'
+    const req = httpTestingController.expectOne(
+      `${environment.apiBaseUrl}ui_settings/`
+    )
+    req.flush(settings)
+    expect(environment.appTitle).toEqual('FooBar')
+    // post for migrate
+    httpTestingController.expectOne(`${environment.apiBaseUrl}ui_settings/`)
+  })
+
+  it('should hide fields if no perms or disabled', () => {
+    jest.spyOn(permissionService, 'currentUserCan').mockReturnValue(false)
+    const req = httpTestingController.expectOne(
+      `${environment.apiBaseUrl}ui_settings/`
+    )
+    req.flush(ui_settings)
+    settingsService.initializeDisplayFields()
+    expect(
+      settingsService.allDisplayFields.includes(DEFAULT_DISPLAY_FIELDS[0])
+    ).toBeTruthy() // title
+    expect(
+      settingsService.allDisplayFields.includes(DEFAULT_DISPLAY_FIELDS[4])
+    ).toBeFalsy() // correspondent
+
+    settingsService.set(SETTINGS_KEYS.NOTES_ENABLED, false)
+    settingsService.initializeDisplayFields()
+    expect(
+      settingsService.allDisplayFields.includes(DEFAULT_DISPLAY_FIELDS[8])
+    ).toBeFalsy() // notes
+
+    jest.spyOn(permissionService, 'currentUserCan').mockReturnValue(true)
+    settingsService.initializeDisplayFields()
+    expect(
+      settingsService.allDisplayFields.includes(DEFAULT_DISPLAY_FIELDS[4])
+    ).toBeTruthy() // correspondent
+  })
+
+  it('should dynamically create display fields options including custom fields', () => {
+    jest.spyOn(permissionService, 'currentUserCan').mockReturnValue(true)
+    jest.spyOn(customFieldsService, 'listAll').mockReturnValue(
+      of({
+        all: customFields.map((f) => f.id),
+        count: customFields.length,
+        results: customFields.concat([]),
+      })
+    )
+    settingsService.initializeDisplayFields()
+    expect(
+      settingsService.allDisplayFields.includes(DEFAULT_DISPLAY_FIELDS[0])
+    ).toBeTruthy()
+    expect(
+      settingsService.allDisplayFields.find(
+        (f) => f.id === `${DisplayField.CUSTOM_FIELD}${customFields[0].id}`
+      ).name
+    ).toEqual(customFields[0].name)
   })
 })

@@ -1,21 +1,39 @@
 import {
+  ChangeDetectorRef,
   Component,
   ElementRef,
-  OnInit,
-  AfterViewChecked,
-  ViewChild,
   OnDestroy,
+  OnInit,
+  ViewChild,
 } from '@angular/core'
-import { Subject, takeUntil } from 'rxjs'
+import { FormsModule, ReactiveFormsModule } from '@angular/forms'
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap'
+import { filter, takeUntil, timer } from 'rxjs'
 import { LogService } from 'src/app/services/rest/log.service'
+import { PageHeaderComponent } from '../../common/page-header/page-header.component'
+import { LoadingComponentWithPermissions } from '../../loading-component/loading.component'
 
 @Component({
   selector: 'pngx-logs',
   templateUrl: './logs.component.html',
   styleUrls: ['./logs.component.scss'],
+  imports: [
+    PageHeaderComponent,
+    NgbNavModule,
+    FormsModule,
+    ReactiveFormsModule,
+  ],
 })
-export class LogsComponent implements OnInit, AfterViewChecked, OnDestroy {
-  constructor(private logService: LogService) {}
+export class LogsComponent
+  extends LoadingComponentWithPermissions
+  implements OnInit, OnDestroy
+{
+  constructor(
+    private logService: LogService,
+    private changedetectorRef: ChangeDetectorRef
+  ) {
+    super()
+  }
 
   public logs: string[] = []
 
@@ -23,52 +41,50 @@ export class LogsComponent implements OnInit, AfterViewChecked, OnDestroy {
 
   public activeLog: string
 
-  private unsubscribeNotifier: Subject<any> = new Subject()
-
-  public isLoading: boolean = false
-
-  public autoRefreshInterval: any
+  public autoRefreshEnabled: boolean = true
 
   @ViewChild('logContainer') logContainer: ElementRef
 
   ngOnInit(): void {
-    this.isLoading = true
     this.logService
       .list()
       .pipe(takeUntil(this.unsubscribeNotifier))
       .subscribe((result) => {
         this.logFiles = result
-        this.isLoading = false
+        this.loading = false
         if (this.logFiles.length > 0) {
           this.activeLog = this.logFiles[0]
           this.reloadLogs()
         }
-        this.toggleAutoRefresh()
+        timer(5000, 5000)
+          .pipe(
+            filter(() => this.autoRefreshEnabled),
+            takeUntil(this.unsubscribeNotifier)
+          )
+          .subscribe(() => {
+            this.reloadLogs()
+          })
       })
   }
 
-  ngAfterViewChecked() {
-    this.scrollToBottom()
-  }
-
   ngOnDestroy(): void {
-    this.unsubscribeNotifier.next(true)
-    this.unsubscribeNotifier.complete()
+    super.ngOnDestroy()
   }
 
   reloadLogs() {
-    this.isLoading = true
+    this.loading = true
     this.logService
       .get(this.activeLog)
       .pipe(takeUntil(this.unsubscribeNotifier))
       .subscribe({
         next: (result) => {
           this.logs = result
-          this.isLoading = false
+          this.loading = false
+          this.scrollToBottom()
         },
         error: () => {
           this.logs = []
-          this.isLoading = false
+          this.loading = false
         },
       })
   }
@@ -88,21 +104,11 @@ export class LogsComponent implements OnInit, AfterViewChecked, OnDestroy {
   }
 
   scrollToBottom(): void {
+    this.changedetectorRef.detectChanges()
     this.logContainer?.nativeElement.scroll({
       top: this.logContainer.nativeElement.scrollHeight,
       left: 0,
       behavior: 'auto',
     })
-  }
-
-  toggleAutoRefresh(): void {
-    if (this.autoRefreshInterval) {
-      clearInterval(this.autoRefreshInterval)
-      this.autoRefreshInterval = null
-    } else {
-      this.autoRefreshInterval = setInterval(() => {
-        this.reloadLogs()
-      }, 5000)
-    }
   }
 }

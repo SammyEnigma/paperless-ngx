@@ -1,16 +1,18 @@
+import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http'
+import { provideHttpClientTesting } from '@angular/common/http/testing'
 import { ComponentFixture, TestBed } from '@angular/core/testing'
-import { PermissionsDialogComponent } from './permissions-dialog.component'
+import { FormsModule, ReactiveFormsModule } from '@angular/forms'
 import { NgbActiveModal, NgbModule } from '@ng-bootstrap/ng-bootstrap'
-import { HttpClientTestingModule } from '@angular/common/http/testing'
+import { NgSelectModule } from '@ng-select/ng-select'
+import { of } from 'rxjs'
 import { SafeHtmlPipe } from 'src/app/pipes/safehtml.pipe'
 import { UserService } from 'src/app/services/rest/user.service'
-import { of } from 'rxjs'
 import { PermissionsFormComponent } from '../input/permissions/permissions-form/permissions-form.component'
-import { SelectComponent } from '../input/select/select.component'
-import { NgSelectModule } from '@ng-select/ng-select'
-import { FormsModule, ReactiveFormsModule } from '@angular/forms'
-import { PermissionsUserComponent } from '../input/permissions/permissions-user/permissions-user.component'
 import { PermissionsGroupComponent } from '../input/permissions/permissions-group/permissions-group.component'
+import { PermissionsUserComponent } from '../input/permissions/permissions-user/permissions-user.component'
+import { SelectComponent } from '../input/select/select.component'
+import { SwitchComponent } from '../input/switch/switch.component'
+import { PermissionsDialogComponent } from './permissions-dialog.component'
 
 const set_permissions = {
   owner: 10,
@@ -33,10 +35,15 @@ describe('PermissionsDialogComponent', () => {
 
   beforeEach(async () => {
     TestBed.configureTestingModule({
-      declarations: [
+      imports: [
+        NgSelectModule,
+        FormsModule,
+        ReactiveFormsModule,
+        NgbModule,
         PermissionsDialogComponent,
         SafeHtmlPipe,
         SelectComponent,
+        SwitchComponent,
         PermissionsFormComponent,
         PermissionsUserComponent,
         PermissionsGroupComponent,
@@ -61,13 +68,8 @@ describe('PermissionsDialogComponent', () => {
               }),
           },
         },
-      ],
-      imports: [
-        HttpClientTestingModule,
-        NgSelectModule,
-        FormsModule,
-        ReactiveFormsModule,
-        NgbModule,
+        provideHttpClient(withInterceptorsFromDi()),
+        provideHttpClientTesting(),
       ],
     }).compileComponents()
 
@@ -111,5 +113,24 @@ describe('PermissionsDialogComponent', () => {
     component.object = obj
     expect(component.title).toEqual(`Edit permissions for ${obj.name}`)
     expect(component.permissions).toEqual(set_permissions)
+  })
+
+  it('should toggle hint based on object existence (if editing) or merge flag', () => {
+    component.form.get('merge').setValue(true)
+    expect(component.hint.includes('Existing')).toBeTruthy()
+    component.form.get('merge').setValue(false)
+    expect(component.hint.includes('will be replaced')).toBeTruthy()
+    component.object = {}
+    expect(component.hint).toBeNull()
+  })
+
+  it('should emit permissions and merge flag on confirm', () => {
+    const confirmSpy = jest.spyOn(component.confirmClicked, 'emit')
+    component.form.get('permissions_form').setValue(set_permissions)
+    component.confirm()
+    expect(confirmSpy).toHaveBeenCalledWith({
+      permissions: set_permissions,
+      merge: true,
+    })
   })
 })

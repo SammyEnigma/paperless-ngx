@@ -1,26 +1,31 @@
-import { HttpClientTestingModule } from '@angular/common/http/testing'
+import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http'
+import { provideHttpClientTesting } from '@angular/common/http/testing'
 import {
   ComponentFixture,
-  TestBed,
   fakeAsync,
+  TestBed,
   tick,
 } from '@angular/core/testing'
-import { Router } from '@angular/router'
-import { RouterTestingModule } from '@angular/router/testing'
-import { TourService, TourNgBootstrapModule } from 'ngx-ui-tour-ng-bootstrap'
+import { Router, RouterModule } from '@angular/router'
+import { NgbModalModule } from '@ng-bootstrap/ng-bootstrap'
+import { allIcons, NgxBootstrapIconsModule } from 'ngx-bootstrap-icons'
+import { NgxFileDropModule } from 'ngx-file-drop'
+import { TourNgBootstrapModule, TourService } from 'ngx-ui-tour-ng-bootstrap'
 import { Subject } from 'rxjs'
 import { routes } from './app-routing.module'
 import { AppComponent } from './app.component'
 import { ToastsComponent } from './components/common/toasts/toasts.component'
+import { FileDropComponent } from './components/file-drop/file-drop.component'
+import { DirtySavedViewGuard } from './guards/dirty-saved-view.guard'
+import { PermissionsGuard } from './guards/permissions.guard'
 import {
   ConsumerStatusService,
   FileStatus,
 } from './services/consumer-status.service'
+import { HotKeyService } from './services/hot-key.service'
 import { PermissionsService } from './services/permissions.service'
-import { ToastService, Toast } from './services/toast.service'
 import { SettingsService } from './services/settings.service'
-import { FileDropComponent } from './components/file-drop/file-drop.component'
-import { NgxFileDropModule } from 'ngx-file-drop'
+import { Toast, ToastService } from './services/toast.service'
 
 describe('AppComponent', () => {
   let component: AppComponent
@@ -31,16 +36,25 @@ describe('AppComponent', () => {
   let toastService: ToastService
   let router: Router
   let settingsService: SettingsService
+  let hotKeyService: HotKeyService
 
   beforeEach(async () => {
     TestBed.configureTestingModule({
-      declarations: [AppComponent, ToastsComponent, FileDropComponent],
-      providers: [],
       imports: [
-        HttpClientTestingModule,
         TourNgBootstrapModule,
-        RouterTestingModule.withRoutes(routes),
+        RouterModule.forRoot(routes),
         NgxFileDropModule,
+        NgbModalModule,
+        AppComponent,
+        ToastsComponent,
+        FileDropComponent,
+        NgxBootstrapIconsModule.pick(allIcons),
+      ],
+      providers: [
+        PermissionsGuard,
+        DirtySavedViewGuard,
+        provideHttpClient(withInterceptorsFromDi()),
+        provideHttpClientTesting(),
       ],
     }).compileComponents()
 
@@ -50,6 +64,7 @@ describe('AppComponent', () => {
     settingsService = TestBed.inject(SettingsService)
     toastService = TestBed.inject(ToastService)
     router = TestBed.inject(Router)
+    hotKeyService = TestBed.inject(HotKeyService)
     fixture = TestBed.createComponent(AppComponent)
     component = fixture.componentInstance
   })
@@ -138,5 +153,21 @@ describe('AppComponent', () => {
     component.ngOnInit()
     fileStatusSubject.next(new FileStatus())
     expect(toastSpy).toHaveBeenCalled()
+  })
+
+  it('should support hotkeys', () => {
+    const addShortcutSpy = jest.spyOn(hotKeyService, 'addShortcut')
+    const routerSpy = jest.spyOn(router, 'navigate')
+    // prevent actual navigation
+    routerSpy.mockReturnValue(new Promise(() => {}))
+    jest.spyOn(permissionsService, 'currentUserCan').mockReturnValue(true)
+    component.ngOnInit()
+    expect(addShortcutSpy).toHaveBeenCalled()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'h' }))
+    expect(routerSpy).toHaveBeenCalledWith(['/dashboard'])
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'd' }))
+    expect(routerSpy).toHaveBeenCalledWith(['/documents'])
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 's' }))
+    expect(routerSpy).toHaveBeenCalledWith(['/settings'])
   })
 })

@@ -1,30 +1,38 @@
 import { Component, OnDestroy, OnInit } from '@angular/core'
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap'
+import { NgxBootstrapIconsModule } from 'ngx-bootstrap-icons'
 import { Subject, first, takeUntil } from 'rxjs'
-import { PaperlessGroup } from 'src/app/data/paperless-group'
-import { PaperlessUser } from 'src/app/data/paperless-user'
+import { Group } from 'src/app/data/group'
+import { User } from 'src/app/data/user'
+import { IfPermissionsDirective } from 'src/app/directives/if-permissions.directive'
 import { PermissionsService } from 'src/app/services/permissions.service'
 import { GroupService } from 'src/app/services/rest/group.service'
 import { UserService } from 'src/app/services/rest/user.service'
+import { SettingsService } from 'src/app/services/settings.service'
 import { ToastService } from 'src/app/services/toast.service'
 import { ConfirmDialogComponent } from '../../common/confirm-dialog/confirm-dialog.component'
 import { EditDialogMode } from '../../common/edit-dialog/edit-dialog.component'
 import { GroupEditDialogComponent } from '../../common/edit-dialog/group-edit-dialog/group-edit-dialog.component'
 import { UserEditDialogComponent } from '../../common/edit-dialog/user-edit-dialog/user-edit-dialog.component'
+import { PageHeaderComponent } from '../../common/page-header/page-header.component'
 import { ComponentWithPermissions } from '../../with-permissions/with-permissions.component'
-import { SettingsService } from 'src/app/services/settings.service'
 
 @Component({
   selector: 'pngx-users-groups',
   templateUrl: './users-groups.component.html',
   styleUrls: ['./users-groups.component.scss'],
+  imports: [
+    PageHeaderComponent,
+    IfPermissionsDirective,
+    NgxBootstrapIconsModule,
+  ],
 })
 export class UsersAndGroupsComponent
   extends ComponentWithPermissions
   implements OnInit, OnDestroy
 {
-  users: PaperlessUser[]
-  groups: PaperlessGroup[]
+  users: User[]
+  groups: Group[]
 
   unsubscribeNotifier: Subject<any> = new Subject()
 
@@ -69,7 +77,7 @@ export class UsersAndGroupsComponent
     this.unsubscribeNotifier.next(true)
   }
 
-  editUser(user: PaperlessUser = null) {
+  editUser(user: User = null) {
     var modal = this.modalService.open(UserEditDialogComponent, {
       backdrop: 'static',
       size: 'xl',
@@ -80,7 +88,7 @@ export class UsersAndGroupsComponent
     modal.componentInstance.object = user
     modal.componentInstance.succeeded
       .pipe(takeUntil(this.unsubscribeNotifier))
-      .subscribe((newUser: PaperlessUser) => {
+      .subscribe((newUser: User) => {
         if (
           newUser.id === this.settings.currentUser.id &&
           (modal.componentInstance as UserEditDialogComponent).passwordIsSet
@@ -107,7 +115,7 @@ export class UsersAndGroupsComponent
       })
   }
 
-  deleteUser(user: PaperlessUser) {
+  deleteUser(user: User) {
     let modal = this.modalService.open(ConfirmDialogComponent, {
       backdrop: 'static',
     })
@@ -133,7 +141,7 @@ export class UsersAndGroupsComponent
     })
   }
 
-  editGroup(group: PaperlessGroup = null) {
+  editGroup(group: Group = null) {
     var modal = this.modalService.open(GroupEditDialogComponent, {
       backdrop: 'static',
       size: 'lg',
@@ -157,7 +165,7 @@ export class UsersAndGroupsComponent
       })
   }
 
-  deleteGroup(group: PaperlessGroup) {
+  deleteGroup(group: Group) {
     let modal = this.modalService.open(ConfirmDialogComponent, {
       backdrop: 'static',
     })

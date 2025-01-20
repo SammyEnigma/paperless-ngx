@@ -1,11 +1,12 @@
-import { test, expect } from '@playwright/test'
+import { expect, test } from '@playwright/test'
+import path from 'node:path'
 
-const REQUESTS_HAR1 = 'e2e/document-list/requests/api-document-list1.har'
-const REQUESTS_HAR2 = 'e2e/document-list/requests/api-document-list2.har'
-const REQUESTS_HAR3 = 'e2e/document-list/requests/api-document-list3.har'
-const REQUESTS_HAR4 = 'e2e/document-list/requests/api-document-list4.har'
-const REQUESTS_HAR5 = 'e2e/document-list/requests/api-document-list5.har'
-const REQUESTS_HAR6 = 'e2e/document-list/requests/api-document-list6.har'
+const REQUESTS_HAR1 = path.join(__dirname, 'requests/api-document-list1.har')
+const REQUESTS_HAR2 = path.join(__dirname, 'requests/api-document-list2.har')
+const REQUESTS_HAR3 = path.join(__dirname, 'requests/api-document-list3.har')
+const REQUESTS_HAR4 = path.join(__dirname, 'requests/api-document-list4.har')
+const REQUESTS_HAR5 = path.join(__dirname, 'requests/api-document-list5.har')
+const REQUESTS_HAR6 = path.join(__dirname, 'requests/api-document-list6.har')
 
 test('basic filtering', async ({ page }) => {
   await page.routeFromHAR(REQUESTS_HAR1, { notFound: 'fallback' })
@@ -45,8 +46,8 @@ test('basic filtering', async ({ page }) => {
 test('text filtering', async ({ page }) => {
   await page.routeFromHAR(REQUESTS_HAR2, { notFound: 'fallback' })
   await page.goto('/documents')
-  await page.getByRole('textbox').click()
-  await page.getByRole('textbox').fill('test')
+  await page.getByRole('main').getByRole('combobox').click()
+  await page.getByRole('main').getByRole('combobox').fill('test')
   await expect(page.locator('pngx-document-list')).toHaveText(/32 documents/)
   await expect(page).toHaveURL(/title_content=test/)
   await page.getByRole('button', { name: 'Title & content' }).click()
@@ -59,12 +60,12 @@ test('text filtering', async ({ page }) => {
   await expect(page.locator('pngx-document-list')).toHaveText(/26 documents/)
   await page.getByRole('button', { name: 'Advanced search' }).click()
   await page.getByRole('button', { name: 'ASN' }).click()
-  await page.getByRole('textbox').fill('1123')
+  await page.getByRole('main').getByRole('combobox').nth(1).fill('1123')
   await expect(page).toHaveURL(/archive_serial_number=1123/)
   await expect(page.locator('pngx-document-list')).toHaveText(/one document/i)
   await page.locator('select').selectOption('greater')
-  await page.getByRole('textbox').click()
-  await page.getByRole('textbox').fill('1123')
+  await page.getByRole('main').getByRole('combobox').nth(1).click()
+  await page.getByRole('main').getByRole('combobox').nth(1).fill('1123')
   await expect(page).toHaveURL(/archive_serial_number__gt=1123/)
   await expect(page.locator('pngx-document-list')).toHaveText(/5 documents/)
   await page.locator('select').selectOption('less')
@@ -81,15 +82,11 @@ test('text filtering', async ({ page }) => {
 test('date filtering', async ({ page }) => {
   await page.routeFromHAR(REQUESTS_HAR3, { notFound: 'fallback' })
   await page.goto('/documents')
-  await page.getByRole('button', { name: 'Created' }).click()
-  await page.getByRole('menuitem', { name: 'Last 3 months' }).click()
+  await page.getByRole('button', { name: 'Dates' }).click()
+  await page.getByRole('menuitem', { name: 'Last 3 months' }).first().click()
   await expect(page.locator('pngx-document-list')).toHaveText(/one document/i)
-  await page.getByRole('button', { name: 'Created Clear selected' }).click()
-  await page.getByRole('button', { name: 'Created' }).click()
-  await page
-    .getByRole('menuitem', { name: 'After mm/dd/yyyy' })
-    .getByRole('button')
-    .click()
+  await page.getByRole('menuitem', { name: 'Last 3 months' }).first().click()
+  await page.getByLabel('Datesselected').getByRole('button').first().click()
   await page.getByRole('combobox', { name: 'Select month' }).selectOption('12')
   await page.getByRole('combobox', { name: 'Select year' }).selectOption('2022')
   await page.getByText('11', { exact: true }).click()
@@ -131,18 +128,18 @@ test('sorting', async ({ page }) => {
   await page.getByRole('button', { name: 'Notes' }).click()
   await expect(page).toHaveURL(/sort=num_notes/)
   await page.getByRole('button', { name: 'Sort' }).click()
-  await page.locator('.w-100 > label > .toolbaricon').first().click()
+  await page.locator('.w-100 > label > i-bs').first().click()
   await expect(page).not.toHaveURL(/reverse=1/)
 })
 
 test('change views', async ({ page }) => {
   await page.routeFromHAR(REQUESTS_HAR5, { notFound: 'fallback' })
   await page.goto('/documents')
-  await page.locator('pngx-page-header label').first().click()
+  await page.locator('.btn-group > label').first().click()
   await expect(page.locator('pngx-document-list table')).toBeVisible()
-  await page.locator('pngx-page-header label').nth(1).click()
+  await page.locator('label:nth-child(4)').first().click()
   await expect(page.locator('pngx-document-card-small').first()).toBeAttached()
-  await page.locator('pngx-page-header label').nth(2).click()
+  await page.locator('label:nth-child(6)').click()
   await expect(page.locator('pngx-document-card-large').first()).toBeAttached()
 })
 

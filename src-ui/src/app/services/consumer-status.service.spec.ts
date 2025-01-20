@@ -1,23 +1,30 @@
+import {
+  HttpEventType,
+  HttpResponse,
+  provideHttpClient,
+  withInterceptorsFromDi,
+} from '@angular/common/http'
+import {
+  HttpTestingController,
+  provideHttpClientTesting,
+} from '@angular/common/http/testing'
 import { TestBed } from '@angular/core/testing'
+import WS from 'jest-websocket-mock'
+import { environment } from 'src/environments/environment'
 import {
   ConsumerStatusService,
   FILE_STATUS_MESSAGES,
   FileStatusPhase,
 } from './consumer-status.service'
-import {
-  HttpClientTestingModule,
-  HttpTestingController,
-} from '@angular/common/http/testing'
-import { environment } from 'src/environments/environment'
 import { DocumentService } from './rest/document.service'
-import { HttpEventType, HttpResponse } from '@angular/common/http'
-import WS from 'jest-websocket-mock'
 import { SettingsService } from './settings.service'
 
 describe('ConsumerStatusService', () => {
   let httpTestingController: HttpTestingController
   let consumerStatusService: ConsumerStatusService
   let documentService: DocumentService
+  let settingsService: SettingsService
+
   const server = new WS(
     `${environment.webSocketProtocol}//${environment.webSocketHost}${environment.webSocketBaseUrl}status/`,
     { jsonProtocol: true }
@@ -25,25 +32,23 @@ describe('ConsumerStatusService', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
+      imports: [],
       providers: [
         ConsumerStatusService,
         DocumentService,
         SettingsService,
-        {
-          provide: SettingsService,
-          useValue: {
-            currentUser: {
-              id: 1,
-              username: 'testuser',
-              is_superuser: false,
-            },
-          },
-        },
+        provideHttpClient(withInterceptorsFromDi()),
+        provideHttpClientTesting(),
       ],
-      imports: [HttpClientTestingModule],
     })
 
     httpTestingController = TestBed.inject(HttpTestingController)
+    settingsService = TestBed.inject(SettingsService)
+    settingsService.currentUser = {
+      id: 1,
+      username: 'testuser',
+      is_superuser: false,
+    }
     consumerStatusService = TestBed.inject(ConsumerStatusService)
     documentService = TestBed.inject(DocumentService)
   })

@@ -10,6 +10,8 @@ from tika_client import TikaClient
 from documents.parsers import DocumentParser
 from documents.parsers import ParseError
 from documents.parsers import make_thumbnail_from_pdf
+from paperless.config import OutputTypeConfig
+from paperless.models import OutputTypeChoices
 
 
 class TikaDocumentParser(DocumentParser):
@@ -31,7 +33,10 @@ class TikaDocumentParser(DocumentParser):
 
     def extract_metadata(self, document_path, mime_type):
         try:
-            with TikaClient(tika_url=settings.TIKA_ENDPOINT) as client:
+            with TikaClient(
+                tika_url=settings.TIKA_ENDPOINT,
+                timeout=settings.CELERY_TASK_TIME_LIMIT,
+            ) as client:
                 parsed = client.metadata.from_file(document_path, mime_type)
                 return [
                     {
@@ -52,7 +57,10 @@ class TikaDocumentParser(DocumentParser):
         self.log.info(f"Sending {document_path} to Tika server")
 
         try:
-            with TikaClient(tika_url=settings.TIKA_ENDPOINT) as client:
+            with TikaClient(
+                tika_url=settings.TIKA_ENDPOINT,
+                timeout=settings.CELERY_TASK_TIME_LIMIT,
+            ) as client:
                 try:
                     parsed = client.tika.as_text.from_file(document_path, mime_type)
                 except httpx.HTTPStatusError as err:
@@ -63,7 +71,7 @@ class TikaDocumentParser(DocumentParser):
                             document_path.read_bytes(),
                             mime_type,
                         )
-                    else:  # pragma: nocover
+                    else:  # pragma: no cover
                         raise
         except Exception as err:
             raise ParseError(
@@ -86,16 +94,25 @@ class TikaDocumentParser(DocumentParser):
 
         self.log.info(f"Converting {document_path} to PDF as {pdf_path}")
 
-        with GotenbergClient(
-            host=settings.TIKA_GOTENBERG_ENDPOINT,
-            timeout=settings.CELERY_TASK_TIME_LIMIT,
-        ) as client, client.libre_office.to_pdf() as route:
+        with (
+            GotenbergClient(
+                host=settings.TIKA_GOTENBERG_ENDPOINT,
+                timeout=settings.CELERY_TASK_TIME_LIMIT,
+            ) as client,
+            client.libre_office.to_pdf() as route,
+        ):
             # Set the output format of the resulting PDF
-            if settings.OCR_OUTPUT_TYPE in {"pdfa", "pdfa-2"}:
+            if settings.OCR_OUTPUT_TYPE in {
+                OutputTypeChoices.PDF_A,
+                OutputTypeChoices.PDF_A2,
+            }:
                 route.pdf_format(PdfAFormat.A2b)
-            elif settings.OCR_OUTPUT_TYPE == "pdfa-1":
-                route.pdf_format(PdfAFormat.A1a)
-            elif settings.OCR_OUTPUT_TYPE == "pdfa-3":
+            elif settings.OCR_OUTPUT_TYPE == OutputTypeChoices.PDF_A1:
+                self.log.warning(
+                    "Gotenberg does not support PDF/A-1a, choosing PDF/A-2b instead",
+                )
+                route.pdf_format(PdfAFormat.A2b)
+            elif settings.OCR_OUTPUT_TYPE == OutputTypeChoices.PDF_A3:
                 route.pdf_format(PdfAFormat.A3b)
 
             route.convert(document_path)
@@ -111,3 +128,9 @@ class TikaDocumentParser(DocumentParser):
                 raise ParseError(
                     f"Error while converting document to PDF: {err}",
                 ) from err
+
+    def get_settings(self) -> OutputTypeConfig:
+        """
+        This parser only uses the PDF output type configuration currently
+        """
+        return OutputTypeConfig()

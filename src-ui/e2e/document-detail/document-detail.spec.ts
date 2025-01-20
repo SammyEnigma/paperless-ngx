@@ -1,7 +1,8 @@
-import { test, expect } from '@playwright/test'
+import { expect, test } from '@playwright/test'
+import path from 'node:path'
 
-const REQUESTS_HAR = 'e2e/document-detail/requests/api-document-detail.har'
-const REQUESTS_HAR2 = 'e2e/document-detail/requests/api-document-detail2.har'
+const REQUESTS_HAR = path.join(__dirname, 'requests/api-document-detail.har')
+const REQUESTS_HAR2 = path.join(__dirname, 'requests/api-document-detail2.har')
 
 test('should activate / deactivate save button when changes are saved', async ({
   page,
@@ -12,13 +13,9 @@ test('should activate / deactivate save button when changes are saved', async ({
   await expect(page.getByTitle('Storage path', { exact: true })).toHaveText(
     /\w+/
   )
-  await expect(
-    page.getByRole('button', { name: 'Save', exact: true })
-  ).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Save' }).nth(1)).toBeDisabled()
   await page.getByTitle('Storage path').getByTitle('Clear all').click()
-  await expect(
-    page.getByRole('button', { name: 'Save', exact: true })
-  ).toBeEnabled()
+  await expect(page.getByRole('button', { name: 'Save' }).nth(1)).toBeEnabled()
 })
 
 test('should warn on unsaved changes', async ({ page }) => {
@@ -27,16 +24,12 @@ test('should warn on unsaved changes', async ({ page }) => {
   await expect(page.getByTitle('Correspondent', { exact: true })).toHaveText(
     /\w+/
   )
-  await expect(
-    page.getByRole('button', { name: 'Save', exact: true })
-  ).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Save' }).nth(1)).toBeDisabled()
   await page
     .getByTitle('Storage path', { exact: true })
     .getByTitle('Clear all')
     .click()
-  await expect(
-    page.getByRole('button', { name: 'Save', exact: true })
-  ).toBeEnabled()
+  await expect(page.getByRole('button', { name: 'Save' }).nth(1)).toBeEnabled()
   await page.getByRole('button', { name: 'Close', exact: true }).click()
   await expect(page.getByRole('dialog')).toHaveText(/unsaved changes/)
   await page.getByRole('button', { name: 'Cancel' }).click()

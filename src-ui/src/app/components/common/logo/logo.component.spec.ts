@@ -1,16 +1,26 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing'
 
-import { LogoComponent } from './logo.component'
+import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http'
+import { provideHttpClientTesting } from '@angular/common/http/testing'
 import { By } from '@angular/platform-browser'
+import { SETTINGS_KEYS } from 'src/app/data/ui-settings'
+import { SettingsService } from 'src/app/services/settings.service'
+import { LogoComponent } from './logo.component'
 
 describe('LogoComponent', () => {
   let component: LogoComponent
   let fixture: ComponentFixture<LogoComponent>
+  let settingsService: SettingsService
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      declarations: [LogoComponent],
+      imports: [LogoComponent],
+      providers: [
+        provideHttpClient(withInterceptorsFromDi()),
+        provideHttpClientTesting(),
+      ],
     })
+    settingsService = TestBed.inject(SettingsService)
     fixture = TestBed.createComponent(LogoComponent)
     component = fixture.componentInstance
     fixture.detectChanges()
@@ -24,13 +34,18 @@ describe('LogoComponent', () => {
   })
 
   it('should support setting height', () => {
-    expect(fixture.debugElement.query(By.css('svg')).attributes.height).toEqual(
-      '6em'
+    expect(fixture.debugElement.query(By.css('svg')).attributes.style).toEqual(
+      'height:6em'
     )
     component.height = '10em'
     fixture.detectChanges()
-    expect(fixture.debugElement.query(By.css('svg')).attributes.height).toEqual(
-      '10em'
+    expect(fixture.debugElement.query(By.css('svg')).attributes.style).toEqual(
+      'height:10em'
     )
+  })
+
+  it('should support getting custom logo', () => {
+    settingsService.set(SETTINGS_KEYS.APP_LOGO, '/logo/test.png')
+    expect(component.customLogo).toEqual('http://localhost:8000/logo/test.png')
   })
 })

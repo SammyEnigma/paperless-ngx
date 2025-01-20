@@ -2,46 +2,58 @@ import { HttpClient } from '@angular/common/http'
 import { Injectable } from '@angular/core'
 import { combineLatest, Observable } from 'rxjs'
 import { tap } from 'rxjs/operators'
-import { PaperlessSavedView } from 'src/app/data/paperless-saved-view'
-import { PermissionsService } from '../permissions.service'
-import { AbstractPaperlessService } from './abstract-paperless-service'
+import { Results } from 'src/app/data/results'
+import { SavedView } from 'src/app/data/saved-view'
+import { SETTINGS_KEYS } from 'src/app/data/ui-settings'
 import { SettingsService } from '../settings.service'
-import { SETTINGS_KEYS } from 'src/app/data/paperless-uisettings'
+import { AbstractPaperlessService } from './abstract-paperless-service'
 
 @Injectable({
   providedIn: 'root',
 })
-export class SavedViewService extends AbstractPaperlessService<PaperlessSavedView> {
-  loading: boolean
+export class SavedViewService extends AbstractPaperlessService<SavedView> {
+  public loading: boolean = true
+  private savedViews: SavedView[] = []
 
   constructor(
-    http: HttpClient,
-    permissionService: PermissionsService,
+    protected http: HttpClient,
     private settingsService: SettingsService
   ) {
     super(http, 'saved_views')
   }
 
-  public initialize() {
-    this.reload()
+  public list(
+    page?: number,
+    pageSize?: number,
+    sortField?: string,
+    sortReverse?: boolean,
+    extraParams?: any
+  ): Observable<Results<SavedView>> {
+    return super.list(page, pageSize, sortField, sortReverse, extraParams).pipe(
+      tap({
+        next: (r) => {
+          this.savedViews = r.results
+          this.loading = false
+          this.settingsService.dashboardIsEmpty =
+            this.dashboardViews.length === 0
+        },
+        error: () => {
+          this.loading = false
+          this.settingsService.dashboardIsEmpty = true
+        },
+      })
+    )
   }
 
-  private reload() {
-    this.loading = true
-    this.listAll().subscribe((r) => {
-      this.savedViews = r.results
-      this.loading = false
-      this.settingsService.dashboardIsEmpty = this.dashboardViews.length === 0
-    })
+  public reload() {
+    this.listAll().subscribe()
   }
-
-  private savedViews: PaperlessSavedView[] = []
 
   get allViews() {
     return this.savedViews
   }
 
-  get sidebarViews(): PaperlessSavedView[] {
+  get sidebarViews(): SavedView[] {
     const sidebarViews = this.savedViews.filter((v) => v.show_in_sidebar)
 
     const sorted: number[] = this.settingsService.get(
@@ -56,7 +68,7 @@ export class SavedViewService extends AbstractPaperlessService<PaperlessSavedVie
       : [...sidebarViews]
   }
 
-  get dashboardViews(): PaperlessSavedView[] {
+  get dashboardViews(): SavedView[] {
     const dashboardViews = this.savedViews.filter((v) => v.show_on_dashboard)
 
     const sorted: number[] = this.settingsService.get(
@@ -71,21 +83,21 @@ export class SavedViewService extends AbstractPaperlessService<PaperlessSavedVie
       : [...dashboardViews]
   }
 
-  create(o: PaperlessSavedView) {
+  create(o: SavedView) {
     return super.create(o).pipe(tap(() => this.reload()))
   }
 
-  update(o: PaperlessSavedView) {
+  update(o: SavedView) {
     return super.update(o).pipe(tap(() => this.reload()))
   }
 
-  patchMany(objects: PaperlessSavedView[]): Observable<PaperlessSavedView[]> {
+  patchMany(objects: SavedView[]): Observable<SavedView[]> {
     return combineLatest(objects.map((o) => super.patch(o))).pipe(
       tap(() => this.reload())
     )
   }
 
-  delete(o: PaperlessSavedView) {
+  delete(o: SavedView) {
     return super.delete(o).pipe(tap(() => this.reload()))
   }
 }
